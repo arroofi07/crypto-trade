@@ -1,7 +1,7 @@
 import { D } from './decimal.js';
 
 export interface StrategyBar { openAt: string; closeAt: string; firstObservedAt: string; lastObservedAt: string; sampleCount: number; close: string; complete: boolean; gap: boolean }
-export const strategyParameters = { warmup: 60, staleSeconds: 90, securitySeconds: 600, minimumLiquidityUsd: '100000', minimumVolumeUsd: '100000', poolAgeHours: 24, emaFast: 9, emaSlow: 21, momentumBars: 15, momentum: '0.03', pullbackMin: '0.02', pullbackMax: '0.06', stopBuffer: '0.99', stopMin: '0.02', stopMax: '0.10', entryHigh: '1.005', expirySeconds: 120, cooldownMinutes: 30, maxHoldMinutes: 120 };
+export const strategyParameters = { warmup: 21, staleSeconds: 90, securitySeconds: 600, minimumLiquidityUsd: '5000', minimumVolumeUsd: '5000', poolAgeHours: 1, emaFast: 9, emaSlow: 21, momentumBars: 15, momentum: '0.01', pullbackMin: '0.005', pullbackMax: '0.12', stopBuffer: '0.99', stopMin: '0.01', stopMax: '0.20', entryHigh: '1.02', expirySeconds: 600, cooldownMinutes: 5, maxHoldMinutes: 240 };
 export function ema(values: string[], period: number): (string | null)[] {
   if (period < 1 || !Number.isInteger(period)) throw new Error('Periode EMA invalid.');
   const result: (string | null)[] = values.map(() => null); if (values.length < period) return result;
@@ -19,8 +19,8 @@ export interface StrategyInput {
 export function evaluateStrategy(input: StrategyInput) {
   const cfg = strategyParameters, now = Date.parse(input.now), reasons: string[] = [];
   if ([input.observedAt, input.sourceAt ?? input.observedAt].some((time) => Date.parse(time) > now || now - Date.parse(time) > cfg.staleSeconds * 1000)) reasons.push('STALE_MARKET');
-  if (input.securityStatus !== 'PASS') reasons.push(input.securityStatus === 'FAIL' ? 'SECURITY_FAIL' : 'SECURITY_UNKNOWN');
-  else if (Date.parse(input.securityCheckedAt) > now || now >= Date.parse(input.securityExpiresAt) || now - Date.parse(input.securityCheckedAt) > 600_000) reasons.push('SECURITY_UNKNOWN');
+  if (input.securityStatus === 'FAIL') reasons.push('SECURITY_FAIL');
+  else if (input.securityStatus === 'PASS' && (Date.parse(input.securityCheckedAt) > now || now >= Date.parse(input.securityExpiresAt) || now - Date.parse(input.securityCheckedAt) > 600_000)) reasons.push('SECURITY_UNKNOWN');
   if (now - Date.parse(input.poolCreatedAt) < cfg.poolAgeHours * 3600_000) reasons.push('POOL_TOO_YOUNG');
   if (new D(input.liquidityUsd).lt(cfg.minimumLiquidityUsd)) reasons.push('LIQUIDITY_LOW');
   if (input.volume24hUsd === null || new D(input.volume24hUsd).lt(cfg.minimumVolumeUsd)) reasons.push('VOLUME_LOW');

@@ -1,8 +1,8 @@
 import { D } from './decimal.js';
 export interface CostModel { slippage: string; feeRate: string; fixedFeeIdr: string; targetR: string; minimumR: string; maxTargetIncrease: string }
 export interface RiskModel { perPosition: string; totalRisk: string; dailyLoss: string; maxPositions: number; maxAllocation: string; liquidityCap: string; timezone: string }
-export const defaultCost: CostModel = { slippage: '0.01', feeRate: '0.003', fixedFeeIdr: '500', targetR: '1.5', minimumR: '1.2', maxTargetIncrease: '0.30' };
-export const defaultRisk: RiskModel = { perPosition: '0.005', totalRisk: '0.015', dailyLoss: '0.02', maxPositions: 3, maxAllocation: '0.10', liquidityCap: '0.0001', timezone: 'Asia/Bangkok' };
+export const defaultCost: CostModel = { slippage: '0.01', feeRate: '0.003', fixedFeeIdr: '500', targetR: '1.5', minimumR: '1.2', maxTargetIncrease: '0.50' };
+export const defaultRisk: RiskModel = { perPosition: '0.005', totalRisk: '0.025', dailyLoss: '0.03', maxPositions: 6, maxAllocation: '0.15', liquidityCap: '0.0005', timezone: 'Asia/Bangkok' };
 export function buyCost(quantity: string, observed: string, fx: string, cost: CostModel = defaultCost) {
   const effective = new D(observed).mul(new D(1).plus(cost.slippage));
   const notional = new D(quantity).mul(effective).mul(fx), fees = notional.mul(cost.feeRate).plus(cost.fixedFeeIdr);

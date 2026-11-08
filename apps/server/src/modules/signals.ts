@@ -1,4 +1,5 @@
-import { D, ema, evaluateStrategy } from '@memecoin/domain';
+import { D, ema, evaluateStrategy, strategyParameters } from '@memecoin/domain';
+import type { SecurityCheck } from '@memecoin/contracts';
 import type { Bar, Decision, Pool, Signal, Snapshot, Token } from '@memecoin/contracts';
 import { signalSchema } from '@memecoin/contracts';
 import { Store } from '../db/store.ts';
@@ -34,11 +35,12 @@ export class SignalService {
     if (this.store.now() >= signal.expiresAt || signal.state === 'EXPIRED') reasons.push('SIGNAL_EXPIRED');
     if (signal.state === 'INVALIDATED') reasons.push('SIGNAL_INVALIDATED');
     if (!this.market.fresh(snapshot)) reasons.push('STALE_MARKET');
-    if (!this.security.valid(signal.tokenId)) reasons.push(security?.status === 'FAIL' ? 'SECURITY_FAIL' : 'SECURITY_UNKNOWN');
-    if (snapshot && (new D(snapshot.liquidityUsd).lt('100000') || !snapshot.volume24hUsd || new D(snapshot.volume24hUsd).lt('100000'))) reasons.push('UNIVERSE_INVALID');
+    if (security?.status === 'FAIL') reasons.push('SECURITY_FAIL');
+    if (snapshot && (new D(snapshot.liquidityUsd).lt(strategyParameters.minimumLiquidityUsd) || !snapshot.volume24hUsd || new D(snapshot.volume24hUsd).lt(strategyParameters.minimumVolumeUsd))) reasons.push('UNIVERSE_INVALID');
     if (!this.thesis(signal.poolId)) reasons.push('TREND_INVALID');
-    const bars = this.bars(signal.poolId).filter((b) => b.closeAt <= this.store.now()).slice(-60);
-    if (bars.length < 60 || bars.some((b, i) => !b.complete || b.gap || b.sampleCount < 2 || (i > 0 && (b.openAt !== bars[i - 1]!.closeAt || Date.parse(b.firstObservedAt) - Date.parse(bars[i - 1]!.lastObservedAt) > 90_000)))) reasons.push('DATA_GAP');
+    const need = strategyParameters.warmup;
+    const bars = this.bars(signal.poolId).filter((b) => b.closeAt <= this.store.now()).slice(-need);
+    if (bars.length < need || bars.some((b, i) => !b.complete || b.gap || b.sampleCount < 2 || (i > 0 && (b.openAt !== bars[i - 1]!.closeAt || Date.parse(b.firstObservedAt) - Date.parse(bars[i - 1]!.lastObservedAt) > 90_000)))) reasons.push('DATA_GAP');
     return reasons;
   }
   invalidate() {
@@ -67,17 +69,18 @@ export class SignalService {
     const dedupe = `strategy:${token.id}:${token.canonicalPoolId}:${barTime ?? this.store.now().slice(0, 16)}`;
     if (this.store.list('decisions', 'dedupe_key=?', [dedupe]).length) return;
     const previous = this.store.list<Signal>('signals', 'token_id=?', [token.id], 'rowid DESC');
-    const result = snapshot && pool && security ? evaluateStrategy({ now: this.store.now(), warmupSince: token.warmupSince, bars: this.bars(pool.id), ...snapshot, poolCreatedAt: pool.createdAtSource, securityStatus: security.status, securityCheckedAt: security.checkedAt, securityExpiresAt: security.expiresAt, lastSignalAt: previous[0]?.publishedAt ?? null, hasValidSignal: previous.some((s) => s.state === 'VALID') }) : { eligible: false, reasonCodes: [snapshot ? 'SECURITY_UNKNOWN' : 'STALE_MARKET'], entry: null, indicators: {}, barCloseAt: barTime ?? null };
+    const result = snapshot && pool ? evaluateStrategy({ now: this.store.now(), warmupSince: token.warmupSince, bars: this.bars(pool.id), ...snapshot, poolCreatedAt: pool.createdAtSource, securityStatus: security?.status ?? 'UNKNOWN', securityCheckedAt: security?.checkedAt ?? this.store.now(), securityExpiresAt: security?.expiresAt ?? this.store.now(), lastSignalAt: previous[0]?.publishedAt ?? null, hasValidSignal: previous.some((s) => s.state === 'VALID') }) : { eligible: false, reasonCodes: ['STALE_MARKET'], entry: null, indicators: {}, barCloseAt: barTime ?? null };
     this.store.transaction(() => {
       let signalId: string | null = null;
-      if (result.eligible && result.entry && snapshot && pool && security) {
+      if (result.eligible && result.entry && snapshot && pool) {
         const config = this.settings.config('strategy', 'momentum-pullback-v1', strategyDefaults);
-        const signal = signalSchema.parse({ id: this.store.id(), tokenId: token.id, poolId: pool.id, state: 'VALID', token: { chain: 'solana', mint: token.mint, name: token.name, symbol: token.symbol }, publishedAt: this.store.now(), expiresAt: new Date(this.store.clock.now().getTime() + 120_000).toISOString(), entry: result.entry,
-          exitPlan: { maxHoldMinutes: 120, targetNetR: '1.5', invalidationReasons: ['STALE_MARKET','SECURITY_FAIL','SECURITY_UNKNOWN','TREND_INVALID','UNIVERSE_INVALID'] },
-          scenarios: { bullish: 'Jika pemulihan berlanjut, posisi simulasi dievaluasi terhadap target net setelah biaya.', neutral: 'Jika momentum tidak berlanjut, tunggu; sinyal berakhir setelah 120 detik.', bearish: 'Jika stop atau tesis dilanggar, rencana keluar memakai observasi valid berikutnya.' },
-          reasons: Object.entries(result.indicators).map(([code, value]) => ({ code, text: `${code}: ${value}`, evidenceIds: [snapshot.id, security.id] })), security,
+        const attachedSecurity: SecurityCheck = security ?? { id: this.store.id(), tokenId: token.id, checkedAt: this.store.now(), expiresAt: this.store.now(), status: 'UNKNOWN', checks: [{ code: 'SECURITY_PENDING', status: 'UNKNOWN', text: 'Pemeriksaan RPC belum tersedia; sinyal eksperimen tetap diterbitkan.' }], evidence: {}, decoderVersion: 'pending', largestRatio: null, top10Ratio: null, limitations: ['Security UNKNOWN bukan bukti aman.'] };
+        const signal = signalSchema.parse({ id: this.store.id(), tokenId: token.id, poolId: pool.id, state: 'VALID', token: { chain: 'solana', mint: token.mint, name: token.name, symbol: token.symbol }, publishedAt: this.store.now(), expiresAt: new Date(this.store.clock.now().getTime() + strategyParameters.expirySeconds * 1000).toISOString(), entry: result.entry,
+          exitPlan: { maxHoldMinutes: strategyParameters.maxHoldMinutes, targetNetR: '1.5', invalidationReasons: ['STALE_MARKET','SECURITY_FAIL','TREND_INVALID','UNIVERSE_INVALID'] },
+          scenarios: { bullish: 'Jika pemulihan berlanjut, posisi simulasi dievaluasi terhadap target net setelah biaya. Bukan jaminan kenaikan 10–50%.', neutral: 'Jika momentum tidak berlanjut, tunggu; sinyal berakhir setelah 10 menit.', bearish: 'Jika stop atau tesis dilanggar, rencana keluar memakai observasi valid berikutnya.' },
+          reasons: Object.entries(result.indicators).map(([code, value]) => ({ code, text: `${code}: ${value}`, evidenceIds: [snapshot.id, attachedSecurity.id] })), security: attachedSecurity,
           dataQuality: { observedAt: snapshot.observedAt, stale: false, gaps: false, sampling: 'sampled' }, newsIds: this.news.list(token.mint).map((n) => n.id), strategyVersion: config.version, strategyConfigId: config.id, configHash: config.hash,
-          evidence: { snapshot, bars: this.bars(pool.id, token.warmupSince), pool, security, indicators: result.indicators, evaluatedAt: this.store.now() },
+          evidence: { snapshot, bars: this.bars(pool.id, token.warmupSince), pool, security: attachedSecurity, indicators: result.indicators, evaluatedAt: this.store.now() },
         });
         this.store.put('signals', signal, { token_id: token.id, pool_id: pool.id, state: signal.state, expires_at: signal.expiresAt }, true);
         this.store.put('signal_events', { id: this.store.id(), signalId: signal.id, eventType: 'CREATED', occurredAt: this.store.now(), reasonCodes: [] }, { signal_id: signal.id }, true);

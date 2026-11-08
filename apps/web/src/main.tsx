@@ -17,6 +17,29 @@ export { time } from './format';
 export function Panel({ title, children }: { title: string; children: ReactNode }) { return <section className="panel"><h2>{title}</h2>{children}</section>; }
 function Empty({ children }: { children: ReactNode }) { return <p className="empty">{children}</p>; }
 function Badge({ children }: { children: ReactNode }) { return <span className="badge">{children}</span>; }
+const PAGE_SIZE = 8;
+function Pager({ page, total, onPage, label }: { page: number; total: number; onPage: (n: number) => void; label: string }) {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const current = Math.min(page, pages);
+  if (total <= PAGE_SIZE) return null;
+  const from = (current - 1) * PAGE_SIZE + 1, to = Math.min(current * PAGE_SIZE, total);
+  const window = Array.from({ length: pages }, (_, i) => i + 1).filter((n) => n === 1 || n === pages || Math.abs(n - current) <= 2);
+  return (
+    <nav className="pager" aria-label={label}>
+      <p className="pager-meta">{from}–{to} dari {total}</p>
+      <div className="pager-buttons">
+        <button type="button" disabled={current <= 1} onClick={() => onPage(current - 1)}>Sebelumnya</button>
+        {window.map((n, i) => (
+          <span key={n} className="pager-slot">
+            {i > 0 && window[i - 1] !== n - 1 ? <span className="pager-ellipsis">…</span> : null}
+            <button type="button" aria-current={n === current ? 'page' : undefined} onClick={() => onPage(n)}>{n}</button>
+          </span>
+        ))}
+        <button type="button" disabled={current >= pages} onClick={() => onPage(current + 1)}>Berikutnya</button>
+      </div>
+    </nav>
+  );
+}
 function NewsList({ items }: { items: NewsItem[] }) { return items.length ? <ul className="news-list">{items.map((n) => <li key={n.id}><a href={n.canonicalUrl} target="_blank" rel="noreferrer">{n.title}</a><p>{n.publisher} · {n.matchStatus} · {n.source === 'manual' ? 'Input manual' : 'RSS'}</p><small>Terbit: {time(n.publishedAt)} · Ditemukan: {time(n.firstSeenAt)}</small><p>{n.summary}</p></li>)}</ul> : <Empty>Belum ada berita terkait. Cakupan terbatas; ketiadaan berita bukan bukti ketiadaan risiko.</Empty>; }
 
 function App() {
@@ -26,10 +49,18 @@ function App() {
   const [connected, setConnected] = useState(false), [healthy, setHealthy] = useState(false), [loading, setLoading] = useState(false), [busy, setBusy] = useState(false);
   const [error, setError] = useState(''), [notice, setNotice] = useState(''), [now, setNow] = useState(serverNow());
   const [selectedSignal, setSelectedSignal] = useState<string | null>(null), [preview, setPreview] = useState<Preview | null>(null), [selectedToken, setSelectedToken] = useState<TokenView | null>(null), [tokenNews, setTokenNews] = useState<NewsItem[]>([]), [txnSeries, setTxnSeries] = useState<TxnSeries | null>(null);
-  const [closing, setClosing] = useState<PositionView | null>(null), [polling, setPolling] = useState(30);
+  const [closing, setClosing] = useState<PositionView | null>(null), [polling, setPolling] = useState(30), [watchPage, setWatchPage] = useState(1), [discoveryPage, setDiscoveryPage] = useState(1), [discoveryQuery, setDiscoveryQuery] = useState('');
   const dialog = useRef<HTMLDialogElement>(null), actionLock = useRef(false), keys = useRef(new Map<string, string>()), mounted = useRef(true), loadingRef = useRef(false);
   const selectedPortfolio = portfolios.find((p) => p.id === portfolioId), signal = signals.find((s) => s.id === selectedSignal);
   const live = healthy && connected;
+  const watchPages = Math.max(1, Math.ceil(watchlist.length / PAGE_SIZE));
+  const watchCurrent = Math.min(watchPage, watchPages);
+  const watchSlice = watchlist.slice((watchCurrent - 1) * PAGE_SIZE, watchCurrent * PAGE_SIZE);
+  const discoveryNeedle = discoveryQuery.trim().toLowerCase();
+  const discoveryFiltered = discoveryNeedle ? discovery.filter((c) => [c.symbol, c.name, c.mint, c.dexId, c.source, ...c.reasonCodes].some((v) => v?.toLowerCase().includes(discoveryNeedle))) : discovery;
+  const discoveryPages = Math.max(1, Math.ceil(discoveryFiltered.length / PAGE_SIZE));
+  const discoveryCurrent = Math.min(discoveryPage, discoveryPages);
+  const discoverySlice = discoveryFiltered.slice((discoveryCurrent - 1) * PAGE_SIZE, discoveryCurrent * PAGE_SIZE);
   const load = useCallback(async () => {
     if (!token || loadingRef.current) return;
     loadingRef.current = true; setLoading(true);
@@ -51,6 +82,8 @@ function App() {
     return () => { mounted.current = false; controller.abort(); clearTimeout(debounce); clearInterval(interval); clearInterval(ticker); };
   }, [load]);
   useEffect(() => { setPreview(null); }, [portfolioId, selectedSignal]);
+  useEffect(() => { setWatchPage((n) => Math.min(n, Math.max(1, Math.ceil(watchlist.length / PAGE_SIZE) || 1))); }, [watchlist.length]);
+  useEffect(() => { setDiscoveryPage((n) => Math.min(n, Math.max(1, Math.ceil(discoveryFiltered.length / PAGE_SIZE) || 1))); }, [discoveryFiltered.length, discoveryNeedle]);
   useEffect(() => { if (closing) dialog.current?.showModal(); else dialog.current?.close(); }, [closing]);
   async function act(action: () => Promise<void>) {
     if (actionLock.current) return; actionLock.current = true; setBusy(true); setError('');
@@ -90,24 +123,33 @@ function App() {
       <p className="intro">Bukti dan risiko lebih dahulu. Seluruh posisi di sini adalah simulasi dengan model biaya, bukan transaksi on-chain.</p>
       {!portfolios.length && <Panel title="Mulai dengan kurs asumsi"><p>Masukkan kurs USD/IDR untuk membuat dua portfolio terpisah. Kurs dibekukan dan tidak diklaim sebagai kurs live.</p><button onClick={() => setPage('Pengaturan')}>Buat eksperimen</button></Panel>}
       {selectedPortfolio && <div className="stats"><Panel title="Ekuitas simulasi"><strong>{money(selectedPortfolio.equityIdr)}</strong><p>{selectedPortfolio.unpriced ? 'UNPRICED · entry diblokir' : `Portfolio ${selectedPortfolio.mode}`}</p></Panel><Panel title="Kas tersedia"><strong>{money(selectedPortfolio.availableCashIdr)}</strong><p>Reservation: {money(selectedPortfolio.reservedCashIdr)}</p></Panel><Panel title="Risiko terbuka"><strong>{money(selectedPortfolio.openRiskIdr)}</strong><p>{selectedPortfolio.daily.haltedAt ? 'DAILY HALT aktif' : 'Termasuk pending reservation'}</p></Panel></div>}
-      <div className="grid-two"><Panel title="Pantauan"><p>{watchlist.length} mint · {discovery.length} kandidat penemuan · {signals.filter((s) => s.state === 'VALID').length} sinyal valid · {positions.filter((p) => p.portfolioId === portfolioId && p.state !== 'CLOSED').length} posisi aktif.</p><p>Minimal 60 bar sampel lengkap sebelum evaluasi sinyal. Penemuan memindai feed, meta, dan pencarian DEX Screener (bukan seluruh chain). Urutan = skor aturan, bukan rekomendasi profit.</p><button onClick={() => setPage('Penemuan')}>Buka penemuan</button></Panel><Panel title="Batas bukti"><p>Security PASS berarti lolos pemeriksaan terbatas. Jika klasifikasi akun belum terbukti, status tetap UNKNOWN dan entry diblokir.</p><p>Tidak ada data atau pemantauan ketika PC/aplikasi berhenti.</p></Panel></div>
+      <div className="grid-two"><Panel title="Pantauan"><p>{watchlist.length} mint · {discovery.length} kandidat penemuan · {signals.filter((s) => s.state === 'VALID').length} sinyal valid · {positions.filter((p) => p.portfolioId === portfolioId && p.state !== 'CLOSED').length} posisi aktif.</p><p>Warm-up 21 bar sampel. Penemuan memindai feed, meta, dan pencarian DEX Screener (bukan seluruh chain). Urutan = skor aturan, bukan rekomendasi profit atau jaminan 10–50%.</p><button onClick={() => setPage('Penemuan')}>Buka penemuan</button></Panel><Panel title="Batas bukti"><p>Security FAIL tetap memblokir. UNKNOWN tidak lagi menahan sinyal eksperimen, tetapi bukan bukti aman.</p><p>Tidak ada data atau pemantauan ketika PC/aplikasi berhenti.</p></Panel></div>
     </>}
-    {page === 'Pengaturan' && <div className="grid-two"><Panel title="Eksperimen baru"><form onSubmit={submitExperiment}><label>Kurs USD/IDR<input name="fx" aria-label="Kurs USD/IDR" required inputMode="decimal" pattern="[0-9]+([.][0-9]+)?" placeholder="Contoh asumsi: 16000" /></label><label className="check"><input type="checkbox" name="activate" />Aktifkan simulasi otomatis pada portfolio strategy</label><p>Modal Rp500.000 masing-masing. Risiko posisi 0,5%, total 1,5%, daily halt 2%. Mengubah kurs membuat eksperimen baru.</p><button type="submit" disabled={busy || !healthy}>Simpan eksperimen</button></form></Panel><Panel title="Pengambilan data"><form onSubmit={(event) => { event.preventDefault(); void act(async () => { await api('/settings', z.object({ pollingSeconds: z.number() }).passthrough(), { method: 'PATCH', body: { pollingSeconds: polling } }); setNotice('Interval diperbarui.'); }); }}><label>Interval polling (detik)<input type="number" min="30" max="300" value={polling} onChange={(e) => setPolling(Number(e.target.value))} /></label><button disabled={busy || !healthy}>Simpan interval</button></form><p>Waktu tampilan UTC+7. Bot token tidak disimpan melalui dashboard.</p></Panel></div>}
+    {page === 'Pengaturan' && <div className="grid-two"><Panel title="Eksperimen baru"><form onSubmit={submitExperiment}><label>Kurs USD/IDR<input name="fx" aria-label="Kurs USD/IDR" required inputMode="decimal" pattern="[0-9]+([.][0-9]+)?" placeholder="Contoh asumsi: 16000" /></label><label className="check"><input type="checkbox" name="activate" />Aktifkan simulasi otomatis pada portfolio strategy</label><p>Modal Rp500.000 masing-masing. Risiko posisi 0,5%, total 2,5%, daily halt 3%, maks 6 posisi. Mengubah kurs membuat eksperimen baru.</p><button type="submit" disabled={busy || !healthy}>Simpan eksperimen</button></form></Panel><Panel title="Pengambilan data"><form onSubmit={(event) => { event.preventDefault(); void act(async () => { await api('/settings', z.object({ pollingSeconds: z.number() }).passthrough(), { method: 'PATCH', body: { pollingSeconds: polling } }); setNotice('Interval diperbarui.'); }); }}><label>Interval polling (detik)<input type="number" min="30" max="300" value={polling} onChange={(e) => setPolling(Number(e.target.value))} /></label><button disabled={busy || !healthy}>Simpan interval</button></form><p>Waktu tampilan UTC+7. Bot token tidak disimpan melalui dashboard.</p></Panel></div>}
     {page === 'Penemuan' && <>
       <Panel title="Antrean kandidat (DEX Screener)"><p>Menggabungkan feed (boost, profil, ads, takeover), meta trending, dan pencarian — diputar setiap ~10 menit. Bukan seluruh chain Solana. Skor = aturan likuiditas/volume/usia pool.</p>
-        {!discovery.length ? <Empty>Belum ada kandidat. Job penemuan berjalan ~10 menit sekali saat aplikasi hidup.</Empty> : <div className="cards">{discovery.map((c) => <article className="panel" key={c.id}><div className="row"><h2>{c.symbol ?? c.mint.slice(0, 10)}</h2><Badge>Skor {c.score}</Badge></div><code className="address">{c.mint}</code><p>{c.reasonCodes.join(' · ')}</p><p>Likuiditas USD {Number(c.liquidityUsd).toLocaleString('en-US')} · DEX {c.dexId}</p><p>Terlihat: {time(c.lastSeenAt)}</p><div className="actions"><button disabled={busy || !healthy} onClick={() => { void act(async () => { await api(`/discovery/${c.mint}/promote`, z.object({ id: z.string() }).passthrough(), { method: 'POST', body: {} }); setNotice('Mint dipromosikan ke watchlist. Menunggu warm-up dan keamanan.'); }); }}>Pantau</button><button disabled={busy || !healthy} onClick={() => { void act(async () => { await api(`/discovery/${c.mint}/dismiss`, z.unknown(), { method: 'POST', body: {} }); }); }}>Abaikan</button></div></article>)}</div>}
+        {discovery.length ? <form className="inline-form discovery-search" onSubmit={(event) => event.preventDefault()}><label>Cari kandidat<input type="search" name="q" aria-label="Cari kandidat penemuan" value={discoveryQuery} onChange={(e) => { setDiscoveryQuery(e.target.value); setDiscoveryPage(1); }} placeholder="Simbol, nama, mint, DEX, atau alasan" autoComplete="off" /></label>{discoveryQuery ? <button type="button" className="ghost-btn" onClick={() => { setDiscoveryQuery(''); setDiscoveryPage(1); }}>Hapus</button> : null}</form> : null}
+        {!discovery.length ? <Empty>Belum ada kandidat. Job penemuan berjalan ~10 menit sekali saat aplikasi hidup.</Empty> : !discoveryFiltered.length ? <Empty>Tidak ada kandidat yang cocok dengan “{discoveryQuery.trim()}”.</Empty> : <>
+          <p className="pager-intro">{discoveryFiltered.length} dari {discovery.length} kandidat · {PAGE_SIZE} per halaman · diurutkan skor tertinggi</p>
+          <div className="cards">{discoverySlice.map((c) => <article className="panel" key={c.id}><div className="row"><h2>{c.symbol ?? c.mint.slice(0, 10)}</h2><Badge>Skor {c.score}</Badge></div><code className="address">{c.mint}</code><p>{c.reasonCodes.join(' · ')}</p><p>Likuiditas USD {Number(c.liquidityUsd).toLocaleString('en-US')} · DEX {c.dexId}</p><p>Terlihat: {time(c.lastSeenAt)}</p><div className="actions"><button disabled={busy || !healthy} onClick={() => { void act(async () => { await api(`/discovery/${c.mint}/promote`, z.object({ id: z.string() }).passthrough(), { method: 'POST', body: {} }); setNotice('Mint dipromosikan ke watchlist. Menunggu warm-up dan keamanan.'); }); }}>Pantau</button><button disabled={busy || !healthy} onClick={() => { void act(async () => { await api(`/discovery/${c.mint}/dismiss`, z.unknown(), { method: 'POST', body: {} }); }); }}>Abaikan</button></div></article>)}</div>
+          <Pager page={discoveryCurrent} total={discoveryFiltered.length} onPage={setDiscoveryPage} label="Halaman penemuan" />
+        </>}
       </Panel>
     </>}
     {page === 'Watchlist' && <>
       <Panel title="Tambah mint Solana"><form className="inline-form" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget, mint = String(new FormData(form).get('mint')); void act(async () => { await api('/watchlist', z.object({ id: z.string() }).passthrough(), { method: 'POST', body: { mint } }); form.reset(); setNotice('Mint ditambahkan. Menunggu observasi dan pemeriksaan keamanan.'); }); }}><label>Alamat mint<input name="mint" aria-label="Alamat mint" required minLength={32} maxLength={44} /></label><button disabled={busy || !healthy}>Tambah watchlist</button></form></Panel>
-      {!watchlist.length ? <Empty>Watchlist kosong. Tambahkan alamat mint, bukan ticker.</Empty> : <div className="cards">{watchlist.map((t) => <article className="panel" key={t.id}><div className="row"><h2>{t.symbol ?? 'Token belum dikenal'}</h2><Badge>{t.stale ? 'STALE' : t.candidateState}</Badge></div><code className="address">{t.mint}</code><p>{t.reasonCodes.join(' · ') || 'Menunggu evaluasi'}</p><p>Observasi: {time(t.snapshot?.observedAt)}</p><div className="actions"><button onClick={() => { void inspect(t.mint); }}>Detail token</button><button onClick={() => { void act(async () => { await api(`/watchlist/${t.mint}`, z.unknown(), { method: 'DELETE', body: {} }); }); }}>Nonaktifkan pantauan</button></div></article>)}</div>}
+      {!watchlist.length ? <Empty>Watchlist kosong. Tambahkan alamat mint, bukan ticker.</Empty> : <>
+        <p className="pager-intro">{watchlist.length} mint dipantau · {PAGE_SIZE} per halaman</p>
+        <div className="cards">{watchSlice.map((t) => <article className="panel" key={t.id}><div className="row"><h2>{t.symbol ?? 'Token belum dikenal'}</h2><Badge>{t.stale ? 'STALE' : t.candidateState}</Badge></div><code className="address">{t.mint}</code><p>{t.reasonCodes.join(' · ') || 'Menunggu evaluasi'}</p><p>Observasi: {time(t.snapshot?.observedAt)}</p><div className="actions"><button onClick={() => { void inspect(t.mint); }}>Detail token</button><button onClick={() => { void act(async () => { await api(`/watchlist/${t.mint}`, z.unknown(), { method: 'DELETE', body: {} }); }); }}>Nonaktifkan pantauan</button></div></article>)}</div>
+        <Pager page={watchCurrent} total={watchlist.length} onPage={setWatchPage} label="Halaman pantauan" />
+      </>}
       {selectedToken && <Panel title={`Detail ${selectedToken.symbol ?? 'token'}`}>
         <Suspense fallback={<p>Memuat detail…</p>}>
           <TokenDetail token={selectedToken} txnSeries={txnSeries} news={tokenNews} onNotice={setNotice} />
         </Suspense>
       </Panel>}
     </>}
-    {page === 'Sinyal' && <div className="grid-two"><Panel title="Sinyal dan keputusan"><p>Skenario bersyarat, tanpa probabilitas profit. Expiry 120 detik; target dihitung per portfolio.</p>{!signals.length ? <Empty>Belum ada sinyal. Periksa warm-up, kesegaran pasar, dan bukti keamanan di watchlist.</Empty> : signals.map((s) => <button className="signal-item" key={s.id} onClick={() => setSelectedSignal(s.id)}><span>{s.token.symbol ?? s.token.mint.slice(0, 12)}</span><Badge>{now >= Date.parse(s.expiresAt) && s.state === 'VALID' ? 'EXPIRED' : s.state}</Badge><small>{time(s.publishedAt)}</small></button>)}</Panel>
+    {page === 'Sinyal' && <div className="grid-two"><Panel title="Sinyal dan keputusan"><p>Skenario bersyarat, tanpa probabilitas profit. Berlaku 10 menit; target net 1,5R dihitung per portfolio (bukan jaminan kenaikan 10–50%).</p>{!signals.length ? <Empty>Belum ada sinyal. Pantau beberapa mint, biarkan polling ~21 menit sampel, lalu cek reasonCodes di watchlist.</Empty> : signals.map((s) => <button className="signal-item" key={s.id} onClick={() => setSelectedSignal(s.id)}><span>{s.token.symbol ?? s.token.mint.slice(0, 12)}</span><Badge>{now >= Date.parse(s.expiresAt) && s.state === 'VALID' ? 'EXPIRED' : s.state}</Badge><small>{time(s.publishedAt)}</small></button>)}</Panel>
       {signal ? <Panel title={`Detail sinyal ${signal.token.symbol ?? ''}`}><code className="address">{signal.token.mint}</code><p>Pool: {String((signal.evidence.pool as { address?: string } | undefined)?.address ?? signal.poolId)}</p><p>Entry USD {signal.entry.lowUsd} – {signal.entry.highUsd} · Stop USD {signal.entry.stopUsd}</p><p>Berlaku sampai {time(signal.expiresAt)} · hold maksimal {signal.exitPlan.maxHoldMinutes} menit.</p><p>Observasi {time(signal.dataQuality.observedAt)} · Security {signal.security.status} ({time(signal.security.checkedAt)})</p><p>{signal.scenarios.bullish}</p><p>{signal.scenarios.neutral}</p><p>{signal.scenarios.bearish}</p><details><summary>Bukti dan alasan</summary>{signal.reasons.map((r) => <p key={r.code}>{r.text}</p>)}<p>Versi: {signal.strategyVersion} · {signal.configHash}</p><p>{signal.security.limitations.join(' ')}</p></details><NewsList items={news.filter((n) => signal.newsIds.includes(n.id))} />
         <button disabled={entryDisabled} onClick={() => { void act(async () => { setPreview(await api(`/signals/${signal.id}/preview`, previewSchema, { method: 'POST', body: { portfolioId } })); }); }}>Hitung preview</button>
         {selectedPortfolio?.mode !== 'manual' && <p>Entry pilihan pengguna menggunakan portfolio manual.</p>}

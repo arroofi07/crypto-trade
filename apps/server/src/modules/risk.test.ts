@@ -19,7 +19,7 @@ it('latches daily halt through recovery and requires fresh valuation at UTC+7 re
   const f = createTradingFixture();
   try {
     const p = f.services.settings.create({ fxUsdIdr: '16000' }).portfolios[0]!;
-    f.services.risk.daily(p.id, '500000'); expect(f.services.risk.daily(p.id, '490000').haltedAt).not.toBeNull();
+    f.services.risk.daily(p.id, '500000'); expect(f.services.risk.daily(p.id, '485000').haltedAt).not.toBeNull();
     expect(f.services.risk.daily(p.id, '510000').haltedAt).not.toBeNull();
     f.clock.advance(17 * 3600_000); expect(f.services.risk.daily(p.id, null).resetPending).toBe(true);
     const day = f.services.risk.daily(p.id, '499000'); expect(day.resetPending).toBe(false); expect(day.openingEquityIdr).toBe('499000'); expect(day.haltedAt).toBeNull();

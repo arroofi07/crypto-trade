@@ -27,7 +27,7 @@ it('allowlists both identities; opaque callbacks revalidate and remain idempoten
     const confirm = sent.find((m) => m.buttons?.[0]?.[0]?.text === 'Konfirmasi exit')!.buttons![0]![0]!.callback_data;
     await telegram.handle(update(7, confirm, true)); expect(f.store.list('exit_intents')).toHaveLength(1);
     expect(f.services.paper.list()[0]!.state).toBe('OPEN'); await f.observe('1.1'); expect(f.services.paper.list()[0]!.state).toBe('CLOSED');
-    f.clock.advance(180_000); await telegram.handle(update(8, key, true)); await telegram.deliver(); expect(sent.at(-1)!.text).toContain('kedaluwarsa');
+    f.clock.advance(601_000); await telegram.handle(update(8, key, true)); await telegram.deliver(); expect(sent.at(-1)!.text).toContain('kedaluwarsa');
   } finally { await f.services.close(); }
 });
 it('never retries ambiguous delivery; rate-limit is retryable and crashed SENDING becomes unknown', async () => {
@@ -45,5 +45,5 @@ it('never retries ambiguous delivery; rate-limit is retryable and crashed SENDIN
 it('drops expired queued signal messages and defaults to no live transport', async () => {
   expect(telegramConfig({})).toBeNull(); expect(() => telegramConfig({ TELEGRAM_ENABLED: 'true' })).toThrow('Konfigurasi');
   const f = createTradingFixture(), { mock, sent } = transport();
-  try { await f.warmup(); const telegram = new TelegramService(f.services, mock, '100', '42'); await telegram.handle(update(1, '/signals')); f.clock.advance(121_000); await telegram.deliver(); expect(sent).toHaveLength(0); } finally { await f.services.close(); }
+  try { await f.warmup(); const telegram = new TelegramService(f.services, mock, '100', '42'); await telegram.handle(update(1, '/signals')); f.clock.advance(601_000); await telegram.deliver(); expect(sent).toHaveLength(0); } finally { await f.services.close(); }
 });

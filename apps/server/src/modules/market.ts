@@ -45,7 +45,7 @@ export class MarketService {
     const { mint } = watchInputSchema.parse(input);
     return this.store.transaction(() => {
       const old = this.tokens().find((t) => t.mint === mint);
-      if (!old?.watchlistEnabled && this.tokens().filter((t) => t.watchlistEnabled).length >= 20) throw new AppError(409, 'CONFLICT', 'Watchlist maksimal 20 mint.');
+      if (!old?.watchlistEnabled && this.tokens().filter((t) => t.watchlistEnabled).length >= 40) throw new AppError(409, 'CONFLICT', 'Watchlist maksimal 40 mint.');
       return this.saveToken(old ? { ...old, watchlistEnabled: true } : { id: this.store.id(), mint, chain: 'solana', name: null, symbol: null, decimals: null, watchlistEnabled: true, canonicalPoolId: null, poolSelectedAt: null, warmupSince: this.store.now(), candidateState: 'WATCH', reasonCodes: ['WARMUP_REQUIRED'] });
     });
   }

@@ -61,7 +61,7 @@ it('rolls back a failed fill and releases reservations when an entry expires', a
     f.store.db.exec("CREATE TRIGGER fixture_crash BEFORE INSERT ON fills BEGIN SELECT RAISE(ABORT,'fixture crash'); END;");
     await expect(f.observe('1.066')).rejects.toThrow('fixture crash');
     expect(f.store.list('positions')).toHaveLength(0); expect(f.services.risk.portfolio(p.id).cashIdr).toBe('500000'); expect(f.services.paper.entry(entry.id).state).toBe('PENDING');
-    f.store.db.exec('DROP TRIGGER fixture_crash'); f.clock.advance(90_000); f.services.paper.tick();
+    f.store.db.exec('DROP TRIGGER fixture_crash'); f.clock.advance(600_000); f.services.paper.tick();
     expect(f.services.paper.entry(entry.id).state).toBe('EXPIRED'); expect(f.services.risk.valuation(p.id).reservedCashIdr).toBe('0');
   } finally { await f.services.close(); }
 });
@@ -71,7 +71,7 @@ it.each(['TARGET','TIME','SECURITY'] as const)('processes %s exit on a fresh obs
   try {
     const signal = await f.warmup(), p = f.services.settings.create({ fxUsdIdr: '16000' }).portfolios[1]!;
     const entry = f.services.paper.request(signal.id, p.id, 'entry'); await f.observe('1.066'); const id = f.services.paper.entry(entry.id).positionId!;
-    if (reason === 'TIME') f.clock.advance(120 * 60_000);
+    if (reason === 'TIME') f.clock.advance(240 * 60_000);
     if (reason === 'SECURITY') {
       f.clock.advance(1); const old = f.services.security.latest(f.token.id)!;
       const check: SecurityCheck = { ...old, id: f.store.id(), checkedAt: f.store.now(), status: 'FAIL' };

@@ -36,7 +36,7 @@ it('restart expires reservations, preserves daily halt, marks positions unpriced
     const pending = f.services.paper.request(signal.id, auto.id, 'pending', 'auto'); expect(pending.state).toBe('PENDING');
     const day = f.services.risk.daily(manual.id, '480000'); expect(day.haltedAt).not.toBeNull();
     const row = f.store.list<OutboxEvent>('outbox').find((r) => r.channel === 'telegram')!; f.store.put('outbox', { ...row, state: 'SENDING' }, { state: 'SENDING', dedupe_key: row.dedupeKey, next_attempt_at: row.nextAttemptAt });
-    const ledger = f.store.list('cash_ledger'); await f.services.close(); f.clock.advance(3 * 3600_000);
+    const ledger = f.store.list('cash_ledger'); await f.services.close(); f.clock.advance(5 * 3600_000);
     const store = new Store(path, f.clock); restarted = new Services(store, { market: { tokens: async () => [], pairs: async () => [], discover: async () => ({ pairs: [], cursor: { metaOffset: 0, searchOffset: 0 } }) }, security: { inspect: async () => { throw new Error('offline'); } } });
     recover(restarted); expect(store.list('cash_ledger')).toEqual(ledger); expect(store.get<EntryRequest>('entry_requests', pending.id)).toMatchObject({ state: 'EXPIRED', reservedCashIdr: '0', reservedRiskIdr: '0' });
     expect(restarted.paper.list()[0]!.state).toBe('UNPRICED'); expect(restarted.risk.valuation(manual.id).equityIdr).toBeNull(); expect(store.get<PortfolioDay>('portfolio_days', day.id)!.haltedAt).toBe(day.haltedAt);

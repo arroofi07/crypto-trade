@@ -13,9 +13,9 @@ const MAX_CANDIDATES = 500;
 export function scoreDiscoveryPair(pair: DexPair, now: number) {
   const reasons: string[] = [];
   let score = 0;
-  if (new D(pair.liquidity.usd).gte('100000')) score += 35; else reasons.push('LIQUIDITY_LOW');
-  if (pair.volume?.h24 && new D(pair.volume.h24).gte('100000')) score += 25; else reasons.push('VOLUME_LOW');
-  if (now - pair.pairCreatedAt >= 24 * 3600_000) score += 20; else reasons.push('POOL_TOO_YOUNG');
+  if (new D(pair.liquidity.usd).gte('5000')) score += 35; else reasons.push('LIQUIDITY_LOW');
+  if (pair.volume?.h24 && new D(pair.volume.h24).gte('5000')) score += 25; else reasons.push('VOLUME_LOW');
+  if (now - pair.pairCreatedAt >= 3600_000) score += 20; else reasons.push('POOL_TOO_YOUNG');
   if (new D(pair.priceUsd).gt(0)) score += 10;
   if (['raydium', 'orca', 'meteora', 'pumpswap'].includes(pair.dexId)) score += 10;
   return { score, reasonCodes: reasons.length ? reasons : ['RULES_OK'] };

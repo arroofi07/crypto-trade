@@ -6,11 +6,11 @@
 
 ## Filter universe
 
-- Chain Solana, pool berumur minimal 24 jam, likuiditas USD minimal 100.000.
-- Volume rolling 24 jam minimal USD100.000; field tidak tersedia berarti belum memenuhi filter.
-- Pemeriksaan keamanan wajib `PASS` sesuai [sumber data](data-sources.md), maksimal berumur 10 menit.
+- Chain Solana, pool berumur minimal 1 jam, likuiditas USD minimal 5.000.
+- Volume rolling 24 jam minimal USD5.000; field tidak tersedia berarti belum memenuhi filter.
+- Pemeriksaan keamanan `FAIL` memblokir. `UNKNOWN` tidak menahan penerbitan sinyal eksperimen (bukan bukti aman). `PASS` yang kedaluwarsa tetap ditolak.
 - Mint/symbol dikenal untuk tampilan tetapi mint tetap identitas utama.
-- Minimal 60 bar sampel 1 menit berurutan dan lengkap untuk warm-up. Satu bar lengkap memerlukan minimal dua observasi berbeda dalam menit tersebut; bar yang belum selesai tidak dipakai untuk trigger.
+- Minimal 21 bar sampel 1 menit berurutan dan lengkap untuk warm-up. Satu bar lengkap memerlukan minimal dua observasi berbeda dalam menit tersebut; bar yang belum selesai tidak dipakai untuk trigger.
 - Tidak ada bar kosong atau gap observasi >90 detik dalam warm-up. Gap memulai ulang warm-up kandidat; monitoring posisi tetap memakai observasi terbaru yang valid.
 
 Ambang likuiditas/usia tidak menjamin kemampuan menjual atau mencegah rug pull. Token yang lolos diberi label lolos pemeriksaan terbatas, bukan aman.

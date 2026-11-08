@@ -13,6 +13,6 @@ it('menghitung skor aturan tanpa klaim profit', () => {
   const good = scoreDiscoveryPair(pair, Date.parse('2026-11-06T00:00:00Z'));
   expect(good.score).toBeGreaterThan(50);
   expect(good.reasonCodes).toContain('RULES_OK');
-  const young = scoreDiscoveryPair({ ...pair, pairCreatedAt: Date.parse('2026-11-06T00:00:00Z') }, Date.parse('2026-11-06T01:00:00Z'));
+  const young = scoreDiscoveryPair({ ...pair, pairCreatedAt: Date.parse('2026-11-06T00:00:00Z') }, Date.parse('2026-11-06T00:30:00Z'));
   expect(young.reasonCodes).toContain('POOL_TOO_YOUNG');
 });
