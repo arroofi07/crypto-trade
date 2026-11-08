@@ -1,0 +1,27 @@
+{
+  "name": "@memecoin/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.3.1",
+    "@fastify/static": "8.3.0",
+    "@memecoin/contracts": "workspace:*",
+    "@memecoin/domain": "workspace:*",
+    "@solana-program/token": "0.18.0",
+    "@solana/kit": "8.5.0",
+    "better-sqlite3": "13.0.3",
+    "fast-xml-parser": "5.11.2",
+    "fastify": "5.12.7",
+    "grammy": "1.46.0",
+    "pino": "10.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0"
+  }
+}

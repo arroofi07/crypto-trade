@@ -1,0 +1,33 @@
+{
+  "name": "memecoin-trade",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.27.0",
+  "engines": { "node": ">=24.22.1 <25", "pnpm": "10.27.0" },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "pnpm build:packages && pnpm -r typecheck && tsc -p tsconfig.tools.json",
+    "build:packages": "pnpm --filter @memecoin/contracts --filter @memecoin/domain build",
+    "build": "pnpm -r build",
+    "test": "pnpm build:packages && vitest run",
+    "test:e2e": "pnpm build && playwright test",
+    "test:smoke": "pnpm build && node scripts/smoke.ts && node scripts/smoke-integration.ts",
+    "replay": "pnpm build:packages && node scripts/replay.ts",
+    "db:backup": "pnpm build:packages && node --env-file-if-exists=.env scripts/database.ts backup",
+    "db:restore": "pnpm build:packages && node --env-file-if-exists=.env scripts/database.ts restore",
+    "dev": "pnpm build:packages && node --watch-path=apps/server/src --watch-path=scripts/dev.ts --watch-path=packages/contracts/dist --watch-path=packages/domain/dist --env-file-if-exists=.env scripts/dev.ts",
+    "start": "node --env-file-if-exists=.env apps/server/dist/main.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.0",
+    "vitest": "5.0.5",
+    "vite": "8.3.5"
+  }
+}

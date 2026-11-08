@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+onlyBuiltDependencies:
+  - esbuild
+# better-sqlite3 13 ships its native prebuilds inside the package (gypfile: false).
+# pnpm 10.27 otherwise infers an unnecessary node-gyp build from binding.gyp.
+ignoredBuiltDependencies:
+  - better-sqlite3
