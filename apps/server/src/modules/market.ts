@@ -10,10 +10,26 @@ import { AppError } from './settings.ts';
 function readSnapshot(raw: Snapshot): Snapshot {
   return snapshotSchema.parse({
     ...raw,
+    volumeH1Usd: raw.volumeH1Usd ?? null,
+    volumeH6Usd: raw.volumeH6Usd ?? null,
+    priceNative: raw.priceNative ?? null,
+    priceChangeM5Pct: raw.priceChangeM5Pct ?? null,
+    priceChangeH1Pct: raw.priceChangeH1Pct ?? null,
+    priceChangeH6Pct: raw.priceChangeH6Pct ?? null,
+    priceChangeH24Pct: raw.priceChangeH24Pct ?? null,
     txnsM5Buys: raw.txnsM5Buys ?? null,
     txnsM5Sells: raw.txnsM5Sells ?? null,
     txnsH1Buys: raw.txnsH1Buys ?? null,
     txnsH1Sells: raw.txnsH1Sells ?? null,
+    txnsH6Buys: raw.txnsH6Buys ?? null,
+    txnsH6Sells: raw.txnsH6Sells ?? null,
+    txnsH24Buys: raw.txnsH24Buys ?? null,
+    txnsH24Sells: raw.txnsH24Sells ?? null,
+    fdvUsd: raw.fdvUsd ?? null,
+    marketCapUsd: raw.marketCapUsd ?? null,
+    liquidityBase: raw.liquidityBase ?? null,
+    liquidityQuote: raw.liquidityQuote ?? null,
+    dexPairUrl: raw.dexPairUrl ?? null,
   });
 }
 
@@ -87,9 +103,16 @@ export class MarketService {
     const gap = previous !== undefined && Date.parse(observedAt) - Date.parse(previous.observedAt) > 90_000;
     const snapshot = snapshotSchema.parse({
       id: this.store.id(), tokenId: token.id, poolId: pool.id, observedAt, sourceAt: null, priceUsd: pair.priceUsd, liquidityUsd: pair.liquidity.usd,
-      volume24hUsd: pair.volume?.h24 ?? null, rollingVolume5mUsd: pair.volume?.m5 ?? null,
+      volume24hUsd: pair.volume?.h24 ?? null, rollingVolume5mUsd: pair.volume?.m5 ?? null, volumeH1Usd: pair.volume?.h1 ?? null, volumeH6Usd: pair.volume?.h6 ?? null,
+      priceNative: pair.priceNative ?? null,
+      priceChangeM5Pct: pair.priceChange?.m5 ?? null, priceChangeH1Pct: pair.priceChange?.h1 ?? null, priceChangeH6Pct: pair.priceChange?.h6 ?? null, priceChangeH24Pct: pair.priceChange?.h24 ?? null,
       txnsM5Buys: pair.txns?.m5?.buys ?? null, txnsM5Sells: pair.txns?.m5?.sells ?? null,
       txnsH1Buys: pair.txns?.h1?.buys ?? null, txnsH1Sells: pair.txns?.h1?.sells ?? null,
+      txnsH6Buys: pair.txns?.h6?.buys ?? null, txnsH6Sells: pair.txns?.h6?.sells ?? null,
+      txnsH24Buys: pair.txns?.h24?.buys ?? null, txnsH24Sells: pair.txns?.h24?.sells ?? null,
+      fdvUsd: pair.fdv ?? null, marketCapUsd: pair.marketCap ?? null,
+      liquidityBase: pair.liquidity.base ?? null, liquidityQuote: pair.liquidity.quote ?? null,
+      dexPairUrl: pair.url ?? null,
       source: 'dexscreener', quality: 'sampled', sourceTimestampAvailable: false,
     });
     this.store.transaction(() => {
@@ -143,7 +166,7 @@ export class MarketService {
     const snapshot = token.canonicalPoolId ? this.latest(token.canonicalPoolId) : undefined;
     return {
       ...token, pool: token.canonicalPoolId ? this.store.get<Pool>('pools', token.canonicalPoolId) : null, snapshot: snapshot ?? null, stale: !this.fresh(snapshot),
-      limitations: ['Harga sampel; timestamp sumber tidak tersedia dari DEX Screener.', 'Volume rolling bukan volume candle.', 'Buy/sell dari field txns DEX Screener pada pool kanonik.'],
+      limitations: ['Observasi lokal ~30 detik; timestamp harga sumber dari DEX Screener tidak tersedia.', 'Volume dan txn adalah jendela rolling provider, bukan candle OHLC.', 'Field kosong berarti provider tidak mengirim atau snapshot sebelum migrasi field.'],
     };
   }
 }

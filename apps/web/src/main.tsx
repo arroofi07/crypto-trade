@@ -7,12 +7,13 @@ import type { DiscoveryCandidate, Health, NewsItem, Signal, TxnSeries } from '@m
 import { api, serverNow, stream, token } from './api';
 import { portfolioView, positionView, previewSchema, settingsView, tokenView } from './dto';
 import type { PortfolioView, PositionView, Preview, TokenView } from './dto';
-const BuySellChart = lazy(() => import('./Chart').then((module) => ({ default: module.BuySellChart })));
 const Journal = lazy(() => import('./Journal').then((module) => ({ default: module.Journal })));
+const TokenDetail = lazy(() => import('./TokenDetail').then((module) => ({ default: module.TokenDetail })));
+import { time } from './format';
 import './styles.css';
 
 export const money = (value: string | null | undefined) => value == null ? 'Tidak dapat dinilai' : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 2 }).format(Number(value));
-export const time = (value: string | null | undefined) => value ? new Date(value).toLocaleString('id-ID', { timeZone: 'Asia/Bangkok', hour12: false }) + ' UTC+7' : 'Belum tersedia';
+export { time } from './format';
 export function Panel({ title, children }: { title: string; children: ReactNode }) { return <section className="panel"><h2>{title}</h2>{children}</section>; }
 function Empty({ children }: { children: ReactNode }) { return <p className="empty">{children}</p>; }
 function Badge({ children }: { children: ReactNode }) { return <span className="badge">{children}</span>; }
@@ -100,8 +101,11 @@ function App() {
     {page === 'Watchlist' && <>
       <Panel title="Tambah mint Solana"><form className="inline-form" onSubmit={(event) => { event.preventDefault(); const form = event.currentTarget, mint = String(new FormData(form).get('mint')); void act(async () => { await api('/watchlist', z.object({ id: z.string() }).passthrough(), { method: 'POST', body: { mint } }); form.reset(); setNotice('Mint ditambahkan. Menunggu observasi dan pemeriksaan keamanan.'); }); }}><label>Alamat mint<input name="mint" aria-label="Alamat mint" required minLength={32} maxLength={44} /></label><button disabled={busy || !healthy}>Tambah watchlist</button></form></Panel>
       {!watchlist.length ? <Empty>Watchlist kosong. Tambahkan alamat mint, bukan ticker.</Empty> : <div className="cards">{watchlist.map((t) => <article className="panel" key={t.id}><div className="row"><h2>{t.symbol ?? 'Token belum dikenal'}</h2><Badge>{t.stale ? 'STALE' : t.candidateState}</Badge></div><code className="address">{t.mint}</code><p>{t.reasonCodes.join(' · ') || 'Menunggu evaluasi'}</p><p>Observasi: {time(t.snapshot?.observedAt)}</p><div className="actions"><button onClick={() => { void inspect(t.mint); }}>Detail token</button><button onClick={() => { void act(async () => { await api(`/watchlist/${t.mint}`, z.unknown(), { method: 'DELETE', body: {} }); }); }}>Nonaktifkan pantauan</button></div></article>)}</div>}
-      {selectedToken && <Panel title={`Detail ${selectedToken.symbol ?? 'token'}`}><code className="address">{selectedToken.mint}</code><button onClick={() => { void navigator.clipboard.writeText(selectedToken.mint).then(() => setNotice('Alamat mint disalin.')).catch(() => setError('Clipboard tidak tersedia; salin alamat yang ditampilkan.')); }}>Salin alamat mint</button><p>Pool: <code className="address">{selectedToken.pool?.address ?? 'Belum ditemukan'}</code></p><p>Security: {selectedToken.security?.status ?? 'UNKNOWN'} · {time(selectedToken.security?.checkedAt)} · {selectedToken.securityFresh ? 'Lolos pemeriksaan terbatas' : 'Belum memenuhi gate entry'}</p>{selectedToken.security?.checks.map((c) => <p key={c.code}>{c.status} — {c.text}</p>)}<p>{selectedToken.limitations.join(' ')}</p>
-        <Suspense fallback={<p>Memuat transaksi buy/sell…</p>}>{txnSeries ? <BuySellChart series={txnSeries} /> : <Empty>Memuat tekanan buy/sell…</Empty>}</Suspense><NewsList items={tokenNews} /></Panel>}
+      {selectedToken && <Panel title={`Detail ${selectedToken.symbol ?? 'token'}`}>
+        <Suspense fallback={<p>Memuat detail…</p>}>
+          <TokenDetail token={selectedToken} txnSeries={txnSeries} news={tokenNews} onNotice={setNotice} />
+        </Suspense>
+      </Panel>}
     </>}
     {page === 'Sinyal' && <div className="grid-two"><Panel title="Sinyal dan keputusan"><p>Skenario bersyarat, tanpa probabilitas profit. Expiry 120 detik; target dihitung per portfolio.</p>{!signals.length ? <Empty>Belum ada sinyal. Periksa warm-up, kesegaran pasar, dan bukti keamanan di watchlist.</Empty> : signals.map((s) => <button className="signal-item" key={s.id} onClick={() => setSelectedSignal(s.id)}><span>{s.token.symbol ?? s.token.mint.slice(0, 12)}</span><Badge>{now >= Date.parse(s.expiresAt) && s.state === 'VALID' ? 'EXPIRED' : s.state}</Badge><small>{time(s.publishedAt)}</small></button>)}</Panel>
       {signal ? <Panel title={`Detail sinyal ${signal.token.symbol ?? ''}`}><code className="address">{signal.token.mint}</code><p>Pool: {String((signal.evidence.pool as { address?: string } | undefined)?.address ?? signal.poolId)}</p><p>Entry USD {signal.entry.lowUsd} – {signal.entry.highUsd} · Stop USD {signal.entry.stopUsd}</p><p>Berlaku sampai {time(signal.expiresAt)} · hold maksimal {signal.exitPlan.maxHoldMinutes} menit.</p><p>Observasi {time(signal.dataQuality.observedAt)} · Security {signal.security.status} ({time(signal.security.checkedAt)})</p><p>{signal.scenarios.bullish}</p><p>{signal.scenarios.neutral}</p><p>{signal.scenarios.bearish}</p><details><summary>Bukti dan alasan</summary>{signal.reasons.map((r) => <p key={r.code}>{r.text}</p>)}<p>Versi: {signal.strategyVersion} · {signal.configHash}</p><p>{signal.security.limitations.join(' ')}</p></details><NewsList items={news.filter((n) => signal.newsIds.includes(n.id))} />

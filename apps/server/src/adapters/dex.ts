@@ -12,14 +12,26 @@ const numeric = z.union([z.string().max(100), z.number()]).transform((v, ctx) =>
   try { const n = new D(v); if (!n.isFinite() || n.isNegative()) throw new Error(); return n.toFixed(); }
   catch { ctx.addIssue({ code: 'custom', message: 'Angka provider invalid.' }); return z.NEVER; }
 });
+const signedNumeric = z.union([z.string().max(100), z.number()]).transform((v, ctx) => {
+  try { const n = new D(v); if (!n.isFinite()) throw new Error(); return n.toFixed(); }
+  catch { ctx.addIssue({ code: 'custom', message: 'Angka provider invalid.' }); return z.NEVER; }
+});
 const txnWindowSchema = z.object({ buys: z.number().int().nonnegative(), sells: z.number().int().nonnegative() });
+const windowedUsd = z.object({ m5: numeric.optional(), h1: numeric.optional(), h6: numeric.optional(), h24: numeric.optional() });
+const windowedPct = z.object({ m5: signedNumeric.optional(), h1: signedNumeric.optional(), h6: signedNumeric.optional(), h24: signedNumeric.optional() });
 export const pairSchema = z.object({
   chainId: z.literal('solana'), dexId: z.enum(['raydium','orca','meteora','pumpswap']), pairAddress: mintSchema,
   baseToken: z.object({ address: mintSchema, name: z.string().max(200).optional(), symbol: z.string().max(40).optional() }),
-  quoteToken: z.object({ address: mintSchema }), priceUsd: numeric.refine((v) => new D(v).gt(0)),
-  liquidity: z.object({ usd: numeric.refine((v) => new D(v).gt(0)) }),
-  volume: z.object({ h24: numeric.optional(), m5: numeric.optional() }).optional(),
+  quoteToken: z.object({ address: mintSchema, symbol: z.string().max(40).optional() }),
+  priceUsd: numeric.refine((v) => new D(v).gt(0)),
+  priceNative: numeric.optional(),
+  liquidity: z.object({ usd: numeric.refine((v) => new D(v).gt(0)), base: numeric.optional(), quote: numeric.optional() }),
+  volume: windowedUsd.optional(),
+  priceChange: windowedPct.optional(),
   txns: z.object({ m5: txnWindowSchema.optional(), h1: txnWindowSchema.optional(), h6: txnWindowSchema.optional(), h24: txnWindowSchema.optional() }).optional(),
+  fdv: numeric.optional(),
+  marketCap: numeric.optional(),
+  url: z.string().max(500).optional(),
   pairCreatedAt: z.number().int().nonnegative(),
 });
 export type DexPair = z.infer<typeof pairSchema>;

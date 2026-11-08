@@ -16,11 +16,15 @@ export const tokenSchema = z.object({ id: z.uuid(), mint: mintSchema, chain: z.l
 export type Token = z.infer<typeof tokenSchema>;
 export const poolSchema = z.object({ id: z.uuid(), tokenId: z.uuid(), address: mintSchema, provider: z.literal('dexscreener'), dexId: z.enum(['raydium','orca','meteora','pumpswap']), quoteMint: mintSchema, createdAtSource: utc });
 export type Pool = z.infer<typeof poolSchema>;
+const txnCount = z.number().int().nonnegative().nullable();
 export const snapshotSchema = z.object({
   id: z.uuid(), tokenId: z.uuid(), poolId: z.uuid(), observedAt: utc, sourceAt: utc.nullable(), priceUsd: positive, liquidityUsd: positive,
-  volume24hUsd: decimal.nullable(), rollingVolume5mUsd: decimal.nullable(),
-  txnsM5Buys: z.number().int().nonnegative().nullable(), txnsM5Sells: z.number().int().nonnegative().nullable(),
-  txnsH1Buys: z.number().int().nonnegative().nullable(), txnsH1Sells: z.number().int().nonnegative().nullable(),
+  volume24hUsd: decimal.nullable(), rollingVolume5mUsd: decimal.nullable(), volumeH1Usd: decimal.nullable(), volumeH6Usd: decimal.nullable(),
+  priceNative: decimal.nullable(),
+  priceChangeM5Pct: decimal.nullable(), priceChangeH1Pct: decimal.nullable(), priceChangeH6Pct: decimal.nullable(), priceChangeH24Pct: decimal.nullable(),
+  txnsM5Buys: txnCount, txnsM5Sells: txnCount, txnsH1Buys: txnCount, txnsH1Sells: txnCount, txnsH6Buys: txnCount, txnsH6Sells: txnCount, txnsH24Buys: txnCount, txnsH24Sells: txnCount,
+  fdvUsd: decimal.nullable(), marketCapUsd: decimal.nullable(), liquidityBase: decimal.nullable(), liquidityQuote: decimal.nullable(),
+  dexPairUrl: z.string().max(500).nullable(),
   source: z.literal('dexscreener'), quality: z.literal('sampled'), sourceTimestampAvailable: z.boolean(),
 });
 export type Snapshot = z.infer<typeof snapshotSchema>;
