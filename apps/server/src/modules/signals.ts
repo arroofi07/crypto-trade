@@ -1,4 +1,4 @@
-import { D, ema, evaluateStrategy, strategyParameters } from '@memecoin/domain';
+import { D, evaluateStrategy, strategyParameters } from '@memecoin/domain';
 import type { SecurityCheck } from '@memecoin/contracts';
 import type { Bar, Decision, Pool, Signal, Snapshot, Token } from '@memecoin/contracts';
 import { signalSchema } from '@memecoin/contracts';
@@ -27,8 +27,12 @@ export class SignalService {
   }
   thesis(poolId: string) {
     const bars = this.contiguousBars(poolId);
-    const closes = bars.map((b) => b.close), fast = ema(closes, 9).at(-1), slow = ema(closes, 21).at(-1);
-    return !!fast && !!slow && new D(fast).gt(slow) && new D(closes.at(-1)!).gt(slow);
+    if (bars.length < 6) return false;
+    const last = new D(bars.at(-1)!.close), peak = D.max(...bars.slice(-60).map((b) => b.close));
+    return last.gte(peak.mul('0.75'));
+  }
+  flow(poolId: string) {
+    return this.store.list<Snapshot>('market_snapshots', 'pool_id=?', [poolId], 'observed_at DESC LIMIT 120').reverse().map((s) => ({ observedAt: s.observedAt, volumeM5Usd: s.rollingVolume5mUsd, buysM5: s.txnsM5Buys, sellsM5: s.txnsM5Sells }));
   }
   gate(signal: Signal): string[] {
     const snapshot = this.market.latest(signal.poolId), security = this.security.latest(signal.tokenId), reasons: string[] = [];
@@ -36,6 +40,7 @@ export class SignalService {
     if (signal.state === 'INVALIDATED') reasons.push('SIGNAL_INVALIDATED');
     if (!this.market.fresh(snapshot)) reasons.push('STALE_MARKET');
     if (security?.status === 'FAIL') reasons.push('SECURITY_FAIL');
+    else if (!this.security.valid(signal.tokenId)) reasons.push('SECURITY_UNKNOWN');
     if (snapshot && (new D(snapshot.liquidityUsd).lt(strategyParameters.minimumLiquidityUsd) || !snapshot.volume24hUsd || new D(snapshot.volume24hUsd).lt(strategyParameters.minimumVolumeUsd))) reasons.push('UNIVERSE_INVALID');
     if (!this.thesis(signal.poolId)) reasons.push('TREND_INVALID');
     const need = strategyParameters.warmup;
@@ -69,16 +74,26 @@ export class SignalService {
     const dedupe = `strategy:${token.id}:${token.canonicalPoolId}:${barTime ?? this.store.now().slice(0, 16)}`;
     if (this.store.list('decisions', 'dedupe_key=?', [dedupe]).length) return;
     const previous = this.store.list<Signal>('signals', 'token_id=?', [token.id], 'rowid DESC');
-    const result = snapshot && pool ? evaluateStrategy({ now: this.store.now(), warmupSince: token.warmupSince, bars: this.bars(pool.id), ...snapshot, poolCreatedAt: pool.createdAtSource, securityStatus: security?.status ?? 'UNKNOWN', securityCheckedAt: security?.checkedAt ?? this.store.now(), securityExpiresAt: security?.expiresAt ?? this.store.now(), lastSignalAt: previous[0]?.publishedAt ?? null, hasValidSignal: previous.some((s) => s.state === 'VALID') }) : { eligible: false, reasonCodes: ['STALE_MARKET'], entry: null, indicators: {}, barCloseAt: barTime ?? null };
+    const result = snapshot && pool ? evaluateStrategy({ now: this.store.now(), warmupSince: token.warmupSince, bars: this.bars(pool.id), flow: this.flow(pool.id), ...snapshot, poolCreatedAt: pool.createdAtSource, securityStatus: security?.status ?? 'UNKNOWN', securityCheckedAt: security?.checkedAt ?? this.store.now(), securityExpiresAt: security?.expiresAt ?? this.store.now(), lastSignalAt: previous[0]?.publishedAt ?? null, hasValidSignal: previous.some((s) => s.state === 'VALID') }) : { eligible: false, reasonCodes: ['STALE_MARKET'], entry: null, indicators: {}, barCloseAt: barTime ?? null };
     this.store.transaction(() => {
       let signalId: string | null = null;
       if (result.eligible && result.entry && snapshot && pool) {
-        const config = this.settings.config('strategy', 'momentum-pullback-v1', strategyDefaults);
-        const attachedSecurity: SecurityCheck = security ?? { id: this.store.id(), tokenId: token.id, checkedAt: this.store.now(), expiresAt: this.store.now(), status: 'UNKNOWN', checks: [{ code: 'SECURITY_PENDING', status: 'UNKNOWN', text: 'Pemeriksaan RPC belum tersedia; sinyal eksperimen tetap diterbitkan.' }], evidence: {}, decoderVersion: 'pending', largestRatio: null, top10Ratio: null, limitations: ['Security UNKNOWN bukan bukti aman.'] };
+        const config = this.settings.config('strategy', 'viral-dip-v1', strategyDefaults);
+        const attachedSecurity: SecurityCheck = security ?? { id: this.store.id(), tokenId: token.id, checkedAt: this.store.now(), expiresAt: this.store.now(), status: 'UNKNOWN', checks: [{ code: 'SECURITY_PENDING', status: 'UNKNOWN', text: 'Pemeriksaan RPC belum tersedia; sinyal tidak diterbitkan tanpa PASS.' }], evidence: {}, decoderVersion: 'pending', largestRatio: null, top10Ratio: null, limitations: ['Security UNKNOWN memblokir sinyal. Bukan bukti aman.'] };
         const signal = signalSchema.parse({ id: this.store.id(), tokenId: token.id, poolId: pool.id, state: 'VALID', token: { chain: 'solana', mint: token.mint, name: token.name, symbol: token.symbol }, publishedAt: this.store.now(), expiresAt: new Date(this.store.clock.now().getTime() + strategyParameters.expirySeconds * 1000).toISOString(), entry: result.entry,
-          exitPlan: { maxHoldMinutes: strategyParameters.maxHoldMinutes, targetNetR: '1.5', invalidationReasons: ['STALE_MARKET','SECURITY_FAIL','TREND_INVALID','UNIVERSE_INVALID'] },
-          scenarios: { bullish: 'Jika pemulihan berlanjut, posisi simulasi dievaluasi terhadap target net setelah biaya. Bukan jaminan kenaikan 10–50%.', neutral: 'Jika momentum tidak berlanjut, tunggu; sinyal berakhir setelah 10 menit.', bearish: 'Jika stop atau tesis dilanggar, rencana keluar memakai observasi valid berikutnya.' },
-          reasons: Object.entries(result.indicators).map(([code, value]) => ({ code, text: `${code}: ${value}`, evidenceIds: [snapshot.id, attachedSecurity.id] })), security: attachedSecurity,
+          exitPlan: { maxHoldMinutes: strategyParameters.maxHoldMinutes, targetNetR: '1.5', invalidationReasons: ['STALE_MARKET','SECURITY_FAIL','SECURITY_UNKNOWN','TREND_INVALID','UNIVERSE_INVALID'] },
+          scenarios: {
+            bullish: result.indicators.mode === 'MOMENTUM_BREAKOUT'
+              ? 'Sinyal momentum: volume 5m melonjak vs baseline 30m dan tekanan buy 5m lebih tinggi. Holder growth dan smart wallet tidak tersedia dari DEX Screener/RPC saat ini.'
+              : 'Sinyal dip-rebound: koreksi 30–50% dari high, konsolidasi ~30 menit, lalu tekanan buy 5m. Bukan jaminan rebound.',
+            neutral: 'Jika volume spike mereda atau tekanan buy hilang, tunggu; sinyal berakhir setelah 10 menit.',
+            bearish: 'Jika harga jatuh >25% dari puncak lokal, security FAIL/UNKNOWN, atau data stale, sinyal dibatalkan.',
+          },
+          reasons: [
+            ...Object.entries(result.indicators).map(([code, value]) => ({ code, text: `${code}: ${value}`, evidenceIds: [snapshot.id, attachedSecurity.id] })),
+            { code: 'LARGEST_ACCOUNT', text: `largestRatio: ${attachedSecurity.largestRatio ?? 'null'} (batas 20% supply; proksi akun)`, evidenceIds: [attachedSecurity.id] },
+            { code: 'TOP10_ACCOUNTS', text: `top10Ratio: ${attachedSecurity.top10Ratio ?? 'null'} (batas 50% supply; proksi akun)`, evidenceIds: [attachedSecurity.id] },
+          ], security: attachedSecurity,
           dataQuality: { observedAt: snapshot.observedAt, stale: false, gaps: false, sampling: 'sampled' }, newsIds: this.news.list(token.mint).map((n) => n.id), strategyVersion: config.version, strategyConfigId: config.id, configHash: config.hash,
           evidence: { snapshot, bars: this.bars(pool.id, token.warmupSince), pool, security: attachedSecurity, indicators: result.indicators, evaluatedAt: this.store.now() },
         });

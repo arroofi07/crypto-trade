@@ -14,13 +14,16 @@ export function createTradingFixture(path = ':memory:') {
   const services = new Services(store, { market: { tokens: async () => [pair], pairs: async () => [pair] }, security: { inspect: async () => securityEvidence } });
   const token = services.market.add({ mint });
   async function observe(price: string, advance = 30_000) { clock.advance(advance); pair = { ...pair, priceUsd: price }; await services.market.collect(); }
-  async function warmup() {
+  async function warmup(inspect = true) {
     const closes = positiveCloses();
     for (let i = 0; i < closes.length; i++) {
-      pair = { ...pair, priceUsd: closes[i]! }; await services.market.collect(); clock.advance(30_000); await services.market.collect(); clock.advance(30_000);
+      const spike = i >= closes.length - 4;
+      pair = { ...pair, priceUsd: closes[i]!, volume: { h24: '1000000', m5: spike ? '800' : '150' }, txns: { m5: { buys: spike ? 90 : 20, sells: spike ? 20 : 25 }, h1: { buys: 400, sells: 380 } } };
+      await services.market.collect(); clock.advance(30_000); await services.market.collect(); clock.advance(30_000);
     }
     pair = { ...pair, priceUsd: closes.at(-1)! }; await services.market.collect();
-    await services.security.inspect(token, true); services.signals.evaluate();
+    if (inspect) await services.security.inspect(token, true);
+    services.signals.evaluate();
     return services.signals.list()[0]!;
   }
   return { clock, store, services, token, observe, warmup };

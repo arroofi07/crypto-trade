@@ -23,14 +23,18 @@ export function registerRoutes(app: FastifyInstance, services: Services) {
   app.get('/api/v1/experiments', async (req) => envelope(req, services.settings.experiments()));
   app.post('/api/v1/experiments', async (req, reply) => { reply.code(201); return envelope(req, services.settings.create(req.body)); });
   app.get('/api/v1/portfolios', async (req) => envelope(req, services.settings.portfolios().map((p) => { const v = services.risk.valuation(p.id); return { ...p, equityIdr: v.equityIdr, availableCashIdr: v.availableCashIdr, reservedCashIdr: v.reservedCashIdr, openRiskIdr: v.openRiskIdr, unpriced: v.unpriced, daily: services.risk.daily(p.id, v.equityIdr) }; })));
-  app.get('/api/v1/watchlist', async (req) => envelope(req, services.market.tokens().filter((t) => t.watchlistEnabled).map((t) => services.market.detail(t.mint))));
+  const tokenView = (mintAddr: string) => {
+    const token = services.market.detail(mintAddr);
+    return { ...token, security: services.security.latest(token.id) ?? null, securityFresh: services.security.valid(token.id) };
+  };
+  app.get('/api/v1/watchlist', async (req) => envelope(req, services.market.tokens().filter((t) => t.watchlistEnabled).map((t) => tokenView(t.mint))));
   app.post('/api/v1/watchlist', async (req, reply) => { reply.code(201); return envelope(req, services.market.add(req.body)); });
   const mint = (req: FastifyRequest) => z.object({ mint: z.string() }).parse(req.params).mint;
   app.delete('/api/v1/watchlist/:mint', async (req) => envelope(req, services.market.remove(mint(req))));
   app.get('/api/v1/discovery', async (req) => envelope(req, services.discovery.list()));
   app.post('/api/v1/discovery/:mint/promote', async (req, reply) => { reply.code(201); return envelope(req, services.discovery.promote(mint(req))); });
   app.post('/api/v1/discovery/:mint/dismiss', async (req) => envelope(req, services.discovery.dismiss(mint(req))));
-  app.get('/api/v1/tokens/:mint', async (req) => { const token = services.market.detail(mint(req)); return envelope(req, { ...token, security: services.security.latest(token.id) ?? null, securityFresh: services.security.valid(token.id) }); });
+  app.get('/api/v1/tokens/:mint', async (req) => envelope(req, tokenView(mint(req))));
   app.get('/api/v1/tokens/:mint/series', async (req) => envelope(req, services.market.series(mint(req))));
   app.get('/api/v1/tokens/:mint/txn-series', async (req) => envelope(req, services.market.txnSeries(mint(req))));
   app.get('/api/v1/news', async (req) => { const query = z.object({ mint: z.string().optional(), matchStatus: z.enum(['EXACT_REFERENCE','UNVERIFIED_MATCH','MARKET_CONTEXT']).optional() }).parse(req.query); return envelope(req, services.news.list(query.mint).filter((n) => !query.matchStatus || n.matchStatus === query.matchStatus)); });

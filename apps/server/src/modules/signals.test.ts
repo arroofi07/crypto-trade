@@ -15,6 +15,14 @@ it('publishes one signal per trigger with immutable evidence and expires exactly
     expect(f.services.signals.get(signal.id).state).toBe('EXPIRED');
   } finally { await f.services.close(); }
 });
+it('does not publish a signal unless security is PASS', async () => {
+  const f = createTradingFixture();
+  try {
+    const signal = await f.warmup(false);
+    expect(signal).toBeUndefined();
+    expect(f.store.list<{ reasonCodes: string[] }>('decisions').at(-1)?.reasonCodes).toContain('SECURITY_UNKNOWN');
+  } finally { await f.services.close(); }
+});
 it('invalidates on failed security without resurrecting the old signal', async () => {
   const f = createTradingFixture();
   try {

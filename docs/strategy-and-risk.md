@@ -8,23 +8,22 @@
 
 - Chain Solana, pool berumur minimal 1 jam, likuiditas USD minimal 5.000.
 - Volume rolling 24 jam minimal USD5.000; field tidak tersedia berarti belum memenuhi filter.
-- Pemeriksaan keamanan `FAIL` memblokir. `UNKNOWN` tidak menahan penerbitan sinyal eksperimen (bukan bukti aman). `PASS` yang kedaluwarsa tetap ditolak.
+- Pemeriksaan keamanan wajib `PASS` dan belum kedaluwarsa. `FAIL` dan `UNKNOWN` memblokir penerbitan sinyal. `PASS` mencakup batas konsentrasi akun (terbesar ≤20%, top 10 ≤50%) bila bukti akun terverifikasi; itu proksi akun, bukan jumlah holder independen.
 - Mint/symbol dikenal untuk tampilan tetapi mint tetap identitas utama.
 - Minimal 21 bar sampel 1 menit berurutan dan lengkap untuk warm-up. Satu bar lengkap memerlukan minimal dua observasi berbeda dalam menit tersebut; bar yang belum selesai tidak dipakai untuk trigger.
 - Tidak ada bar kosong atau gap observasi >90 detik dalam warm-up. Gap memulai ulang warm-up kandidat; monitoring posisi tetap memakai observasi terbaru yang valid.
 
 Ambang likuiditas/usia tidak menjamin kemampuan menjual atau mencegah rug pull. Token yang lolos diberi label lolos pemeriksaan terbatas, bukan aman.
 
-## Aturan entry eksperimental
+## Aturan entry eksperimental (`viral-dip-v1`)
 
-Evaluasi pada penutupan bar sampel 1 menit. EMA menggunakan alpha 2/(n+1), di-seed SMA n close pertama. Bar hanya dihitung setelah timestamp penutupnya lewat.
+Evaluasi pada penutupan bar sampel 1 menit. Sinyal BUY jika **salah satu** pemicu terpenuhi (setelah gate universe/security FAIL).
 
-1. Tren: EMA9 > EMA21 dan close saat ini > EMA21; perubahan close dibanding 15 bar lalu minimal +3%.
-2. Pullback: hitung H = close tertinggi dari 10 bar sebelum bar pemicu. Close bar sebelum pemicu harus 2%-6% di bawah H.
-3. Pemulihan: close bar pemicu > close bar sebelumnya dan >= EMA9.
-4. Stop S = close terendah dari 5 bar sebelum pemicu dikali 0,99. Jarak dari close pemicu ke S harus 2%-10%; di luar rentang tidak diterbitkan sinyal valid.
-5. Area entry = [close pemicu, close pemicu x 1,005]. Sinyal berlaku 120 detik dari publikasi; pada `now >= expiresAt` sinyal sudah kedaluwarsa.
-6. Maksimal satu sinyal valid per mint; cooldown 30 menit sesudah sinyal diterbitkan. Evaluasi tetap merekam alasan kandidat ditolak.
+**A — Momentum / breakout:** volume rolling 5 menit ≥ 4× rata-rata volume 5 menit pada jendela 5–30 menit sebelumnya, dan jumlah tx buy 5m > sell 5m. Pertumbuhan unique holder dan “smart wallet” **tidak tersedia** dari DEX Screener/RPC MVP — tidak diisi dengan data rekaan.
+
+**B — Dip buy / rebound:** high awal pada lookback, lalu koreksi 30–50%, konsolidasi ~30 bar 1 menit dengan rentang ≤15% tanpa drop bar >15%, dan tekanan buy 5m. Panic selling top holder on-chain **tidak diukur**.
+
+Stop S = close terendah 5 bar sebelum pemicu × 0,99. Area entry = [close, close × 1,02]. Berlaku 10 menit; satu sinyal valid per mint; cooldown 5 menit.
 
 Persyaratan sebelum entry diperiksa ulang: harga observasi berikutnya berada di area entry, sinyal belum kedaluwarsa, data segar, keamanan valid, tesis tren masih berlaku, dan risk gate portofolio lolos. Jangan mengisi entry di luar area hanya karena pernah masuk area sebelumnya.
 

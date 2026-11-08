@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { NewsItem, Snapshot, TxnSeries } from '@memecoin/contracts';
 import type { TokenView } from './dto';
-import { dexLabel, pctChange, pctClass, time, usdCompact, usdPrice } from './format';
+import { dexLabel, pctChange, pctClass, supplyShare, time, usdCompact, usdPrice } from './format';
 import { BuySellChart } from './Chart';
 
 function Badge({ children, className }: { children: ReactNode; className?: string }) {
@@ -105,6 +105,7 @@ export function TokenDetail({
           </h2>
           <div className="token-badges">
             <Badge className={token.stale ? 'badge-warn' : 'badge-ok'}>{token.stale ? 'STALE' : 'FRESH'}</Badge>
+            <Badge className={token.security?.status === 'PASS' && token.securityFresh ? 'badge-ok' : 'badge-warn'}>{token.security?.status ?? 'UNKNOWN'}</Badge>
             <Badge>{token.candidateState}</Badge>
             {pool ? <Badge>{dexLabel(pool.dexId)}</Badge> : <Badge>Pool belum dipilih</Badge>}
           </div>
@@ -182,10 +183,15 @@ export function TokenDetail({
       <section className="token-section" aria-labelledby="token-security-heading">
         <h3 id="token-security-heading">Keamanan (terbatas)</h3>
         <p className="section-lead">
-          <Badge>{token.security?.status ?? 'UNKNOWN'}</Badge>
+          <Badge className={token.security?.status === 'PASS' && token.securityFresh ? 'badge-ok' : 'badge-warn'}>{token.security?.status ?? 'UNKNOWN'}</Badge>
           {' '}· pemeriksaan {time(token.security?.checkedAt)}
-          {' '}· {token.securityFresh ? 'Segar untuk gate entry' : 'Belum memenuhi / UNKNOWN gate entry'}
+          {' '}· {token.securityFresh ? 'PASS segar: boleh jadi sinyal' : 'Bukan PASS segar: sinyal diblokir'}
         </p>
+        <div className="metric-grid metric-grid-3">
+          <Metric label="Akun terbesar" value={supplyShare(token.security?.largestRatio)} hint="Batas PASS ≤ 20% supply" />
+          <Metric label="Top 10 akun" value={supplyShare(token.security?.top10Ratio)} hint="Batas PASS ≤ 50% supply" />
+          <Metric label="Status gate" value={token.securityFresh ? 'Lolos gate' : 'Diblokir'} hint="Proksi akun, bukan jumlah orang" />
+        </div>
         {(token.security?.checks ?? []).map((c) => <p key={c.code} className="security-line"><strong>{c.status}</strong> — {c.text}</p>)}
         {!token.security?.checks?.length ? <p className="empty">Belum ada bukti RPC terbaru.</p> : null}
       </section>

@@ -7,7 +7,10 @@ function recording(): z.infer<typeof recordingSchema> {
   const events: z.infer<typeof recordingSchema>['events'] = [];
   for (let seconds = 0; seconds <= 3600; seconds += 300) events.push({ kind: 'security', firstSeenAt: time(seconds), mint, evidence: securityEvidence });
   const prices = [...positiveCloses().flatMap((price) => [price, price]), '1.065','1.066','1.5'];
-  prices.forEach((price, i) => events.push({ kind: 'market', firstSeenAt: time(i * 30), pairs: [{ chainId: 'solana', dexId: 'raydium', pairAddress: '11111111111111111111111111111111', baseToken: { address: mint, symbol: 'TEST' }, quoteToken: { address: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' }, priceUsd: price, liquidity: { usd: '1000000' }, volume: { h24: '1000000' }, pairCreatedAt: Date.parse('2026-10-20T00:00:00Z') }] }));
+  prices.forEach((price, i) => {
+    const spike = i * 30 >= 3600;
+    events.push({ kind: 'market', firstSeenAt: time(i * 30), pairs: [{ chainId: 'solana', dexId: 'raydium', pairAddress: '11111111111111111111111111111111', baseToken: { address: mint, symbol: 'TEST' }, quoteToken: { address: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' }, priceUsd: price, liquidity: { usd: '1000000' }, volume: { h24: '1000000', m5: spike ? '800' : '150' }, txns: { m5: { buys: spike ? 90 : 20, sells: spike ? 20 : 25 } }, pairCreatedAt: Date.parse('2026-10-20T00:00:00Z') }] });
+  });
   events.push({ kind: 'news', firstSeenAt: time(3630), item: { title: 'Known after signal', url: 'https://example.com/late', mint } });
   return { name: 'sample', start, evaluationStart: time(3600), end: time(3900), fxUsdIdr: '16000', events };
 }

@@ -29,6 +29,13 @@ export function pctClass(value: string | null | undefined) {
   return n > 0 ? 'pct-up' : 'pct-down';
 }
 
+export function supplyShare(value: string | null | undefined) {
+  if (value == null) return '—';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+  return `${(n * 100).toFixed(1)}%`;
+}
+
 export function dexLabel(id: string) {
   return { raydium: 'Raydium', orca: 'Orca', meteora: 'Meteora', pumpswap: 'PumpSwap' }[id] ?? id;
 }
