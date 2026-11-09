@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { ema, evaluateStrategy } from './strategy.js';
+import { ema, evaluateStrategy, warmupProgress } from './strategy.js';
 import type { FlowPoint, StrategyInput } from './strategy.js';
 
 function flow(nowMs: number, spike = true): FlowPoint[] {
@@ -23,8 +23,17 @@ it('seeds EMA and fires momentum breakout when 5m volume spikes 4x with buy pres
   const request = input(); const result = evaluateStrategy(request);
   expect(result.eligible).toBe(true); expect(result.indicators.mode).toBe('MOMENTUM_BREAKOUT');
   expect(evaluateStrategy(request)).toEqual(result);
-  expect(evaluateStrategy({ ...request, bars: request.bars.slice(40) }).reasonCodes).toContain('WARMUP_REQUIRED');
+  expect(warmupProgress(request.bars, request.warmupSince, request.now).done).toBe(true);
+  expect(warmupProgress(request.bars.slice(40), request.warmupSince, request.now).done).toBe(false);
+  expect(evaluateStrategy({ ...request, bars: request.bars.slice(40), flow: [] }).reasonCodes).toContain('WARMUP_REQUIRED');
   expect(evaluateStrategy({ ...request, now: '2026-10-22T00:59:59.999Z' }).eligible).toBe(false);
+  const snap = evaluateStrategy({
+    ...request, bars: request.bars.slice(-3), flow: [],
+    rollingVolume5mUsd: '800', volumeH1Usd: '2450', txnsM5Buys: 90, txnsM5Sells: 20,
+  });
+  expect(snap.eligible).toBe(true);
+  expect(snap.indicators.volumeSource).toBe('dex-window');
+  expect(snap.reasonCodes).not.toContain('WARMUP_REQUIRED');
 });
 it('blocks fail/stale data, cooldown, and missing volume spike; dip rebound needs 30–50% pullback', () => {
   const request = input();

@@ -19,7 +19,7 @@ Ambang likuiditas/usia tidak menjamin kemampuan menjual atau mencegah rug pull. 
 
 Evaluasi pada penutupan bar sampel 1 menit. Sinyal BUY jika **salah satu** pemicu terpenuhi (setelah gate universe/security FAIL).
 
-**A — Momentum / breakout:** volume rolling 5 menit ≥ 4× rata-rata volume 5 menit pada jendela 5–30 menit sebelumnya, dan jumlah tx buy 5m > sell 5m. Pertumbuhan unique holder dan “smart wallet” **tidak tersedia** dari DEX Screener/RPC MVP — tidak diisi dengan data rekaan.
+**A — Momentum / breakout:** (1) jendela DEX: `volume.m5` ≥ 4× rata-rata 5 menit dari sisa `volume.h1`, dan buy 5m > sell 5m — tanpa menunggu 21 bar; atau (2) seri lokal 30 menit jika sudah terkumpul. Bukan candle histori (API DEX Screener tidak menyediakannya). Holder/smart wallet **tidak tersedia**.
 
 **B — Dip buy / rebound:** high awal pada lookback, lalu koreksi 30–50%, konsolidasi ~30 bar 1 menit dengan rentang ≤15% tanpa drop bar >15%, dan tekanan buy 5m. Panic selling top holder on-chain **tidak diukur**.
 

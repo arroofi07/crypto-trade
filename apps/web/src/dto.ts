@@ -3,7 +3,7 @@ import { portfolioSchema, tokenSchema, poolSchema, snapshotSchema, securitySchem
 
 export const portfolioView = portfolioSchema.extend({ equityIdr: decimal.nullable(), availableCashIdr: decimal, reservedCashIdr: decimal, openRiskIdr: decimal, unpriced: z.boolean(), daily: z.object({ openingEquityIdr: decimal.nullable(), haltedAt: z.string().nullable(), resetPending: z.boolean() }) });
 export type PortfolioView = z.infer<typeof portfolioView>;
-export const tokenView = tokenSchema.extend({ pool: poolSchema.nullable(), snapshot: snapshotSchema.nullable(), stale: z.boolean(), limitations: z.array(z.string()), security: securitySchema.nullable().optional(), securityFresh: z.boolean().optional() });
+export const tokenView = tokenSchema.extend({ pool: poolSchema.nullable(), snapshot: snapshotSchema.nullable(), stale: z.boolean(), limitations: z.array(z.string()), security: securitySchema.nullable().optional(), securityFresh: z.boolean().optional(), warmupBars: z.number().int().nonnegative().optional(), warmupNeed: z.number().int().positive().optional(), warmupDone: z.boolean().optional() });
 export type TokenView = z.infer<typeof tokenView>;
 export const positionView = positionSchema.extend({ snapshot: snapshotSchema.nullable(), stale: z.boolean(), simulation: z.boolean(), exitIntent: z.object({ requestedAt: z.string(), reason: z.string() }).passthrough().nullable() });
 export type PositionView = z.infer<typeof positionView>;

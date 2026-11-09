@@ -19,7 +19,9 @@ export function ema(values: string[], period: number): (string | null)[] {
 }
 export interface StrategyInput {
   now: string; warmupSince: string; bars: StrategyBar[]; flow?: FlowPoint[];
-  observedAt: string; sourceAt: string | null; priceUsd: string; liquidityUsd: string; volume24hUsd: string | null; poolCreatedAt: string;
+  observedAt: string; sourceAt: string | null; priceUsd: string; liquidityUsd: string; volume24hUsd: string | null;
+  rollingVolume5mUsd?: string | null; volumeH1Usd?: string | null; txnsM5Buys?: number | null; txnsM5Sells?: number | null;
+  poolCreatedAt: string;
   securityStatus: 'PASS' | 'FAIL' | 'UNKNOWN'; securityCheckedAt: string; securityExpiresAt: string; securityTradable?: boolean;
   lastSignalAt: string | null; hasValidSignal: boolean;
 }
@@ -33,6 +35,12 @@ function contiguous(bars: StrategyBar[], warmupSince: string, now: number) {
     else if (prev && (bar.openAt !== prev.closeAt || Date.parse(bar.firstObservedAt) - Date.parse(prev.lastObservedAt) > 90_000)) start = i;
   }
   return filtered.slice(start);
+}
+export function warmupProgress(bars: StrategyBar[], warmupSince: string, now: string, need = strategyParameters.warmup) {
+  const sequence = contiguous(bars, warmupSince, Date.parse(now));
+  const lastClose = sequence.at(-1)?.closeAt;
+  const staleTail = !lastClose || Date.parse(now) - Date.parse(lastClose) > 90_000;
+  return { have: staleTail ? 0 : sequence.length, need, done: !staleTail && sequence.length >= need };
 }
 
 function mean(values: Array<InstanceType<typeof D>>) {
@@ -57,6 +65,20 @@ function momentumTrigger(flow: FlowPoint[], now: number, cfg: typeof strategyPar
     buysM5: last?.buysM5 != null ? String(last.buysM5) : null,
     sellsM5: last?.sellsM5 != null ? String(last.sellsM5) : null,
   };
+}
+
+function providerMomentum(input: StrategyInput, cfg: typeof strategyParameters) {
+  const m5 = input.rollingVolume5mUsd, h1 = input.volumeH1Usd;
+  if (!m5 || !h1) return { ok: false, evaluated: false, spike: false, pressure: false, volumeRatio: null as string | null, buysM5: null as string | null, sellsM5: null as string | null };
+  const five = new D(m5), hour = new D(h1);
+  if (!five.isFinite() || !hour.isFinite() || five.lte(0) || hour.lte(0)) return { ok: false, evaluated: true, spike: false, pressure: false, volumeRatio: null, buysM5: null, sellsM5: null };
+  const rest = hour.minus(five);
+  const baseline = rest.gt(0) ? rest.div(11) : null;
+  const ratio = baseline && baseline.gt(0) ? five.div(baseline) : five.gt(0) ? new D(cfg.volumeSpikeMultiple) : null;
+  const buys = input.txnsM5Buys, sells = input.txnsM5Sells;
+  const pressure = buys != null && sells != null && buys > sells;
+  const spike = !!(ratio && ratio.gte(cfg.volumeSpikeMultiple));
+  return { ok: spike && pressure, evaluated: true, spike, pressure, volumeRatio: ratio?.toFixed() ?? null, buysM5: buys != null ? String(buys) : null, sellsM5: sells != null ? String(sells) : null };
 }
 
 function dipTrigger(sequence: StrategyBar[], flow: FlowPoint[], now: number, cfg: typeof strategyParameters) {
@@ -90,24 +112,30 @@ export function evaluateStrategy(input: StrategyInput) {
   if (input.hasValidSignal) reasons.push('ACTIVE_SIGNAL');
   if (input.lastSignalAt && now - Date.parse(input.lastSignalAt) < cfg.cooldownMinutes * 60_000) reasons.push('COOLDOWN');
   const sequence = contiguous(input.bars, input.warmupSince, now);
-  if (sequence.length < cfg.warmup || !sequence.length || now - Date.parse(sequence.at(-1)!.closeAt) > 90_000) reasons.push('WARMUP_REQUIRED');
+  const warmupShort = sequence.length < cfg.warmup || !sequence.length || now - Date.parse(sequence.at(-1)!.closeAt) > 90_000;
   const flow = (input.flow ?? []).filter((p) => Date.parse(p.observedAt) <= now);
-  const momentum = momentumTrigger(flow, now, cfg);
+  const localMomentum = momentumTrigger(flow, now, cfg);
+  const snapMomentum = providerMomentum(input, cfg);
+  const momentum = localMomentum.ok ? localMomentum : snapMomentum;
   const dip = dipTrigger(sequence, flow, now, cfg);
-  const triggered = momentum.ok || dip.ok;
-  if (sequence.length >= cfg.warmup && !triggered) {
-    if (!momentum.ok) reasons.push(momentum.spike ? 'BUY_PRESSURE_MISSING' : 'VOLUME_SPIKE_MISSING');
-    if (!dip.ok) reasons.push('DIP_REBOUND_MISSING');
+  const triggered = localMomentum.ok || snapMomentum.ok || dip.ok;
+  if (warmupShort && !snapMomentum.evaluated && !localMomentum.ok) reasons.push('WARMUP_REQUIRED');
+  if (!triggered && (snapMomentum.evaluated || !warmupShort)) {
+    if (!localMomentum.ok && !snapMomentum.ok) reasons.push(momentum.spike ? 'BUY_PRESSURE_MISSING' : 'VOLUME_SPIKE_MISSING');
+    if (!dip.ok && !warmupShort) reasons.push('DIP_REBOUND_MISSING');
   }
   let entry: { lowUsd: string; highUsd: string; stopUsd: string } | null = null;
-  const close = sequence.length ? new D(sequence.at(-1)!.close) : null;
-  if (close && sequence.length >= 6) {
+  const close = sequence.length ? new D(sequence.at(-1)!.close) : new D(input.priceUsd);
+  if (sequence.length >= 6) {
     const stop = D.min(...sequence.slice(-6, -1).map((b) => b.close)).mul(cfg.stopBuffer);
     entry = { lowUsd: close.toFixed(), highUsd: close.mul(cfg.entryHigh).toFixed(), stopUsd: stop.toFixed() };
+  } else if (triggered && close.gt(0)) {
+    entry = { lowUsd: close.toFixed(), highUsd: close.mul(cfg.entryHigh).toFixed(), stopUsd: close.mul(cfg.stopBuffer).toFixed() };
   }
   const indicators: Record<string, string> = {
-    mode: momentum.ok ? 'MOMENTUM_BREAKOUT' : dip.ok ? 'DIP_REBOUND' : 'NONE',
+    mode: localMomentum.ok || snapMomentum.ok ? 'MOMENTUM_BREAKOUT' : dip.ok ? 'DIP_REBOUND' : 'NONE',
     volumeRatio: momentum.volumeRatio ?? 'null',
+    volumeSource: localMomentum.ok ? 'local-flow' : snapMomentum.ok ? 'dex-window' : 'none',
     volumeSpike: String(momentum.spike),
     buyPressure: String(momentum.pressure || dip.pressure),
     buysM5: momentum.buysM5 ?? 'null',

@@ -1,4 +1,4 @@
-import { D } from '@memecoin/domain';
+import { D, strategyParameters, warmupProgress } from '@memecoin/domain';
 import { barSchema, mintSchema, poolSchema, snapshotSchema, tokenSchema, watchInputSchema } from '@memecoin/contracts';
 import type { Bar, Pool, Snapshot, Token, DataGap } from '@memecoin/contracts';
 import { Store } from '../db/store.ts';
@@ -162,11 +162,15 @@ export class MarketService {
     return { points, latest, limitations };
   }
   detail(mint: string) {
+    this.closeBars();
     const token = this.token(mint);
     const snapshot = token.canonicalPoolId ? this.latest(token.canonicalPoolId) : undefined;
+    const bars = token.canonicalPoolId ? this.store.list<Bar>('sample_bars', 'pool_id=?', [token.canonicalPoolId], 'open_at ASC') : [];
+    const warmup = warmupProgress(bars, token.warmupSince, this.store.now(), strategyParameters.warmup);
     return {
       ...token, pool: token.canonicalPoolId ? this.store.get<Pool>('pools', token.canonicalPoolId) : null, snapshot: snapshot ?? null, stale: !this.fresh(snapshot),
-      limitations: ['Observasi lokal ~30 detik; timestamp harga sumber dari DEX Screener tidak tersedia.', 'Volume dan txn adalah jendela rolling provider, bukan candle OHLC.', 'Field kosong berarti provider tidak mengirim atau snapshot sebelum migrasi field.'],
+      warmupBars: warmup.have, warmupNeed: warmup.need, warmupDone: warmup.done,
+      limitations: ['Observasi lokal ~30 detik; timestamp harga sumber dari DEX Screener tidak tersedia.', 'Volume dan txn adalah jendela rolling provider, bukan candle OHLC.', 'Field kosong berarti provider tidak mengirim atau snapshot sebelum migrasi field.', 'Warm-up = 21 bar 1 menit beruntun (min. 2 sampel/menit); gap >90 detik atau ganti pool mengulang dari 0.'],
     };
   }
 }

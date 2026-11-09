@@ -40,7 +40,7 @@ Pastikan respons skema cocok. `null`, nilai tidak finite, desimal tidak valid, m
 ## Seri harga dan keterbatasan indikator
 Simpan snapshot 30 detik, bangun bar sampel 1 menit dari pengamatan yang benar-benar diterima. Bar ditandai `sampled`, bukan OHLC dari seluruh transaksi. Volume rolling 5 menit dari provider tidak boleh dijumlahkan menjadi volume candle karena jendelanya tumpang tindih.
 
-Indikator strategi MVP memakai harga penutupan sampel. Tidak mengklaim mendeteksi high/low intramenit, semua wallet, order flow detail, atau wash trading secara pasti. Lightweight Charts tidak memberikan histori pasar secara otomatis.
+API publik DEX Screener **tidak** menyediakan candle/OHLC histori. Momentum boleh memakai jendela rolling yang sudah ada (`volume.m5` vs sisa `volume.h1`/11, plus txns m5). Itu proksi spike, bukan grafik 1 menit. Dip-rebound tetap butuh bar sampel lokal. Jangan scraping endpoint chart internal DEX Screener.
 
 Pool kanonik terkunci untuk episode sinyal/posisi. Pergantian pool pada watchlist memulai warm-up seri baru; jangan menyambung harga antar-pool tanpa provenance. Jika pool posisi hilang, tandai posisi tidak dapat dinilai; jangan mengarang harga exit.
 
