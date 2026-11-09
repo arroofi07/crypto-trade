@@ -53,8 +53,9 @@ export class Services {
     this.scheduler.add('paper', () => 1000, async () => { this.paper.tick(); });
     this.telegram = options.telegram ? new TelegramService(this, options.telegram.transport, options.telegram.chatId, options.telegram.userId) : null;
     this.performance = new PerformanceService(this);
-    this.discovery = new DiscoveryService(store, this.market, marketAdapter ?? this.market.adapter);
+    this.discovery = new DiscoveryService(store, this.market, marketAdapter ?? this.market.adapter, options.security ?? this.security.adapter);
     this.scheduler.add('discovery', () => 600_000, () => this.discovery.refresh());
+    this.scheduler.add('discovery-security', () => 60_000, () => this.discovery.screen(6));
     if (this.telegram) this.scheduler.add('telegram', () => 1000, () => { this.telegram!.healthAlert(); return this.telegram!.deliver(); });
     this.scheduler.add('heartbeat', () => 30_000, async () => { store.put('job_state', { id: 'runtime', lastSeenAt: store.now(), cleanShutdown: false }); });
     if (store.path !== ':memory:') this.scheduler.add('maintenance', () => 86400_000, async () => {

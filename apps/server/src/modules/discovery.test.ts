@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { discoveryCandidateSchema } from '@memecoin/contracts';
 import { scoreDiscoveryPair } from './discovery.ts';
 import type { DexPair } from '../adapters/dex.ts';
 
@@ -15,4 +16,14 @@ it('menghitung skor aturan tanpa klaim profit', () => {
   expect(good.reasonCodes).toContain('RULES_OK');
   const young = scoreDiscoveryPair({ ...pair, pairCreatedAt: Date.parse('2026-11-06T00:00:00Z') }, Date.parse('2026-11-06T00:30:00Z'));
   expect(young.reasonCodes).toContain('POOL_TOO_YOUNG');
+});
+it('parses kandidat lama tanpa field keamanan sebagai PENDING', () => {
+  const row = discoveryCandidateSchema.parse({
+    id: '11111111-1111-4111-8111-111111111111', mint: pair.baseToken.address, symbol: 'USDC', name: null,
+    poolAddress: pair.pairAddress, dexId: 'raydium', priceUsd: '1', liquidityUsd: '150000', volume24hUsd: '120000',
+    score: 90, reasonCodes: ['RULES_OK'], firstSeenAt: '2026-11-06T00:00:00.000Z', lastSeenAt: '2026-11-06T00:00:00.000Z',
+    expiresAt: '2026-11-13T00:00:00.000Z', dismissed: false, promoted: false, source: 'search',
+  });
+  expect(row.securityStatus).toBe('PENDING');
+  expect(row.securityTradable).toBe(false);
 });

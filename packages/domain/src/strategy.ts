@@ -20,7 +20,7 @@ export function ema(values: string[], period: number): (string | null)[] {
 export interface StrategyInput {
   now: string; warmupSince: string; bars: StrategyBar[]; flow?: FlowPoint[];
   observedAt: string; sourceAt: string | null; priceUsd: string; liquidityUsd: string; volume24hUsd: string | null; poolCreatedAt: string;
-  securityStatus: 'PASS' | 'FAIL' | 'UNKNOWN'; securityCheckedAt: string; securityExpiresAt: string;
+  securityStatus: 'PASS' | 'FAIL' | 'UNKNOWN'; securityCheckedAt: string; securityExpiresAt: string; securityTradable?: boolean;
   lastSignalAt: string | null; hasValidSignal: boolean;
 }
 
@@ -81,8 +81,9 @@ function dipTrigger(sequence: StrategyBar[], flow: FlowPoint[], now: number, cfg
 export function evaluateStrategy(input: StrategyInput) {
   const cfg = strategyParameters, now = Date.parse(input.now), reasons: string[] = [];
   if ([input.observedAt, input.sourceAt ?? input.observedAt].some((time) => Date.parse(time) > now || now - Date.parse(time) > cfg.staleSeconds * 1000)) reasons.push('STALE_MARKET');
-  if (input.securityStatus === 'FAIL') reasons.push('SECURITY_FAIL');
-  else if (input.securityStatus !== 'PASS' || Date.parse(input.securityCheckedAt) > now || now >= Date.parse(input.securityExpiresAt) || now - Date.parse(input.securityCheckedAt) > 600_000) reasons.push('SECURITY_UNKNOWN');
+  const securityFresh = Date.parse(input.securityCheckedAt) <= now && now < Date.parse(input.securityExpiresAt) && now - Date.parse(input.securityCheckedAt) <= 600_000;
+  const tradable = input.securityTradable ?? input.securityStatus === 'PASS';
+  if (!securityFresh || !tradable) reasons.push(input.securityStatus === 'FAIL' ? 'SECURITY_FAIL' : 'SECURITY_UNKNOWN');
   if (now - Date.parse(input.poolCreatedAt) < cfg.poolAgeHours * 3600_000) reasons.push('POOL_TOO_YOUNG');
   if (new D(input.liquidityUsd).lt(cfg.minimumLiquidityUsd)) reasons.push('LIQUIDITY_LOW');
   if (input.volume24hUsd === null || new D(input.volume24hUsd).lt(cfg.minimumVolumeUsd)) reasons.push('VOLUME_LOW');

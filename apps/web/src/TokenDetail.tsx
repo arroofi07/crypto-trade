@@ -105,7 +105,7 @@ export function TokenDetail({
           </h2>
           <div className="token-badges">
             <Badge className={token.stale ? 'badge-warn' : 'badge-ok'}>{token.stale ? 'STALE' : 'FRESH'}</Badge>
-            <Badge className={token.security?.status === 'PASS' && token.securityFresh ? 'badge-ok' : 'badge-warn'}>{token.security?.status ?? 'UNKNOWN'}</Badge>
+            <Badge className={token.securityFresh ? 'badge-ok' : 'badge-warn'}>{token.security?.status ?? 'UNKNOWN'}{token.securityFresh ? ' · GATE OK' : ''}</Badge>
             <Badge>{token.candidateState}</Badge>
             {pool ? <Badge>{dexLabel(pool.dexId)}</Badge> : <Badge>Pool belum dipilih</Badge>}
           </div>
@@ -183,9 +183,9 @@ export function TokenDetail({
       <section className="token-section" aria-labelledby="token-security-heading">
         <h3 id="token-security-heading">Keamanan (terbatas)</h3>
         <p className="section-lead">
-          <Badge className={token.security?.status === 'PASS' && token.securityFresh ? 'badge-ok' : 'badge-warn'}>{token.security?.status ?? 'UNKNOWN'}</Badge>
+          <Badge className={token.securityFresh ? 'badge-ok' : 'badge-warn'}>{token.security?.status ?? 'UNKNOWN'}{token.securityFresh ? ' · GATE OK' : ''}</Badge>
           {' '}· pemeriksaan {time(token.security?.checkedAt)}
-          {' '}· {token.securityFresh ? 'PASS segar: boleh jadi sinyal' : 'Bukan PASS segar: sinyal diblokir'}
+          {' '}· {token.securityFresh ? 'Gate sinyal lolos (mint/freeze/extension). Konsentrasi UNKNOWN tidak memblokir.' : 'Gate sinyal diblokir: FAIL mint/freeze/extension/konsentrasi, atau RPC belum siap.'}
         </p>
         <div className="metric-grid metric-grid-3">
           <Metric label="Akun terbesar" value={supplyShare(token.security?.largestRatio)} hint="Batas PASS ≤ 20% supply" />

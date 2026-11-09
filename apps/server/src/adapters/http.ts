@@ -3,7 +3,7 @@ import type { Clock } from '@memecoin/domain';
 import { systemClock } from '@memecoin/domain';
 
 export class ProviderError extends Error { readonly code: string; constructor(code: string) { super('Provider tidak tersedia.'); this.code = code; } }
-export interface HttpOptions { fetch?: typeof fetch; clock?: Clock; wait?: (ms: number) => Promise<unknown>; random?: () => number; budget?: number; timeoutMs?: number }
+export interface HttpOptions { fetch?: typeof fetch; clock?: Clock; wait?: (ms: number) => Promise<unknown>; random?: () => number; budget?: number; timeoutMs?: number; retry429?: boolean }
 export class HttpClient {
   private readonly options: HttpOptions;
   private requests: number[] = [];
@@ -45,7 +45,7 @@ export class HttpClient {
           return Buffer.concat(chunks).toString('utf8');
         } catch (error) {
           const code = error instanceof ProviderError ? error.code : 'NETWORK_TIMEOUT';
-          if (attempt === 2 || ['HTTP_REJECTED','RESPONSE_TOO_LARGE','EMPTY_RESPONSE'].includes(code) || retryAfter > 60_000) throw new ProviderError(code);
+          if (attempt === 2 || ['HTTP_REJECTED','RESPONSE_TOO_LARGE','EMPTY_RESPONSE'].includes(code) || retryAfter > 60_000 || (code === 'RATE_LIMITED' && this.options.retry429 === false)) throw new ProviderError(code);
           await (this.options.wait ?? sleep)(Math.max(retryAfter, 500 * 2 ** attempt + (this.options.random ?? Math.random)() * 250));
         }
       }

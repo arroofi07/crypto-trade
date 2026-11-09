@@ -8,7 +8,7 @@
 
 - Chain Solana, pool berumur minimal 1 jam, likuiditas USD minimal 5.000.
 - Volume rolling 24 jam minimal USD5.000; field tidak tersedia berarti belum memenuhi filter.
-- Pemeriksaan keamanan wajib `PASS` dan belum kedaluwarsa. `FAIL` dan `UNKNOWN` memblokir penerbitan sinyal. `PASS` mencakup batas konsentrasi akun (terbesar ≤20%, top 10 ≤50%) bila bukti akun terverifikasi; itu proksi akun, bukan jumlah holder independen.
+- Gate sinyal: mint terinisialisasi, supply valid, mint/freeze authority mati, tanpa extension berbahaya (transfer fee/hook/delegate/pause). Metadata Token-2022 diizinkan. `FAIL` pada syarat itu memblokir. Konsentrasi `UNKNOWN` (RPC/vault) **tidak** memblokir sinyal; `FAIL` konsentrasi (terbesar >20% / top 10 >50% saat terverifikasi) memblokir. Penemuan menyaring kandidat `securityTradable` sebelum pantau.
 - Mint/symbol dikenal untuk tampilan tetapi mint tetap identitas utama.
 - Minimal 21 bar sampel 1 menit berurutan dan lengkap untuk warm-up. Satu bar lengkap memerlukan minimal dua observasi berbeda dalam menit tersebut; bar yang belum selesai tidak dipakai untuk trigger.
 - Tidak ada bar kosong atau gap observasi >90 detik dalam warm-up. Gap memulai ulang warm-up kandidat; monitoring posisi tetap memakai observasi terbaru yang valid.

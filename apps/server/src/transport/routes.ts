@@ -32,7 +32,7 @@ export function registerRoutes(app: FastifyInstance, services: Services) {
   const mint = (req: FastifyRequest) => z.object({ mint: z.string() }).parse(req.params).mint;
   app.delete('/api/v1/watchlist/:mint', async (req) => envelope(req, services.market.remove(mint(req))));
   app.get('/api/v1/discovery', async (req) => envelope(req, services.discovery.list()));
-  app.post('/api/v1/discovery/:mint/promote', async (req, reply) => { reply.code(201); return envelope(req, services.discovery.promote(mint(req))); });
+  app.post('/api/v1/discovery/:mint/promote', async (req, reply) => { reply.code(201); return envelope(req, await services.discovery.promote(mint(req))); });
   app.post('/api/v1/discovery/:mint/dismiss', async (req) => envelope(req, services.discovery.dismiss(mint(req))));
   app.get('/api/v1/tokens/:mint', async (req) => envelope(req, tokenView(mint(req))));
   app.get('/api/v1/tokens/:mint/series', async (req) => envelope(req, services.market.series(mint(req))));

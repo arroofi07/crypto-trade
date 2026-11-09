@@ -1,4 +1,4 @@
-import { D, evaluateStrategy, strategyParameters } from '@memecoin/domain';
+import { D, evaluateStrategy, securityTradable, strategyParameters } from '@memecoin/domain';
 import type { SecurityCheck } from '@memecoin/contracts';
 import type { Bar, Decision, Pool, Signal, Snapshot, Token } from '@memecoin/contracts';
 import { signalSchema } from '@memecoin/contracts';
@@ -74,12 +74,12 @@ export class SignalService {
     const dedupe = `strategy:${token.id}:${token.canonicalPoolId}:${barTime ?? this.store.now().slice(0, 16)}`;
     if (this.store.list('decisions', 'dedupe_key=?', [dedupe]).length) return;
     const previous = this.store.list<Signal>('signals', 'token_id=?', [token.id], 'rowid DESC');
-    const result = snapshot && pool ? evaluateStrategy({ now: this.store.now(), warmupSince: token.warmupSince, bars: this.bars(pool.id), flow: this.flow(pool.id), ...snapshot, poolCreatedAt: pool.createdAtSource, securityStatus: security?.status ?? 'UNKNOWN', securityCheckedAt: security?.checkedAt ?? this.store.now(), securityExpiresAt: security?.expiresAt ?? this.store.now(), lastSignalAt: previous[0]?.publishedAt ?? null, hasValidSignal: previous.some((s) => s.state === 'VALID') }) : { eligible: false, reasonCodes: ['STALE_MARKET'], entry: null, indicators: {}, barCloseAt: barTime ?? null };
+    const result = snapshot && pool ? evaluateStrategy({ now: this.store.now(), warmupSince: token.warmupSince, bars: this.bars(pool.id), flow: this.flow(pool.id), ...snapshot, poolCreatedAt: pool.createdAtSource, securityStatus: security?.status ?? 'UNKNOWN', securityCheckedAt: security?.checkedAt ?? this.store.now(), securityExpiresAt: security?.expiresAt ?? this.store.now(), securityTradable: security ? securityTradable(security.checks) : false, lastSignalAt: previous[0]?.publishedAt ?? null, hasValidSignal: previous.some((s) => s.state === 'VALID') }) : { eligible: false, reasonCodes: ['STALE_MARKET'], entry: null, indicators: {}, barCloseAt: barTime ?? null };
     this.store.transaction(() => {
       let signalId: string | null = null;
       if (result.eligible && result.entry && snapshot && pool) {
         const config = this.settings.config('strategy', 'viral-dip-v1', strategyDefaults);
-        const attachedSecurity: SecurityCheck = security ?? { id: this.store.id(), tokenId: token.id, checkedAt: this.store.now(), expiresAt: this.store.now(), status: 'UNKNOWN', checks: [{ code: 'SECURITY_PENDING', status: 'UNKNOWN', text: 'Pemeriksaan RPC belum tersedia; sinyal tidak diterbitkan tanpa PASS.' }], evidence: {}, decoderVersion: 'pending', largestRatio: null, top10Ratio: null, limitations: ['Security UNKNOWN memblokir sinyal. Bukan bukti aman.'] };
+        const attachedSecurity: SecurityCheck = security ?? { id: this.store.id(), tokenId: token.id, checkedAt: this.store.now(), expiresAt: this.store.now(), status: 'UNKNOWN', checks: [{ code: 'SECURITY_PENDING', status: 'UNKNOWN', text: 'Pemeriksaan RPC belum tersedia; sinyal tidak diterbitkan.' }], evidence: {}, decoderVersion: 'pending', largestRatio: null, top10Ratio: null, limitations: ['Gate sinyal butuh mint/freeze/extension lolos; konsentrasi UNKNOWN tidak memblokir.'] };
         const signal = signalSchema.parse({ id: this.store.id(), tokenId: token.id, poolId: pool.id, state: 'VALID', token: { chain: 'solana', mint: token.mint, name: token.name, symbol: token.symbol }, publishedAt: this.store.now(), expiresAt: new Date(this.store.clock.now().getTime() + strategyParameters.expirySeconds * 1000).toISOString(), entry: result.entry,
           exitPlan: { maxHoldMinutes: strategyParameters.maxHoldMinutes, targetNetR: '1.5', invalidationReasons: ['STALE_MARKET','SECURITY_FAIL','SECURITY_UNKNOWN','TREND_INVALID','UNIVERSE_INVALID'] },
           scenarios: {

@@ -30,6 +30,7 @@ it('blocks fail/stale data, cooldown, and missing volume spike; dip rebound need
   const request = input();
   expect(evaluateStrategy({ ...request, securityStatus: 'UNKNOWN' }).reasonCodes).toContain('SECURITY_UNKNOWN');
   expect(evaluateStrategy({ ...request, securityStatus: 'UNKNOWN' }).eligible).toBe(false);
+  expect(evaluateStrategy({ ...request, securityStatus: 'UNKNOWN', securityTradable: true }).eligible).toBe(true);
   expect(evaluateStrategy({ ...request, securityStatus: 'FAIL' }).reasonCodes).toContain('SECURITY_FAIL');
   expect(evaluateStrategy({ ...request, securityExpiresAt: request.now }).reasonCodes).toContain('SECURITY_UNKNOWN');
   expect(evaluateStrategy({ ...request, sourceAt: '2026-10-22T00:58:29Z' }).reasonCodes).toContain('STALE_MARKET');

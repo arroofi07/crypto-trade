@@ -20,6 +20,10 @@ export const discoveryCandidateSchema = z.object({
   dismissed: z.boolean(),
   promoted: z.boolean(),
   source: z.enum(['boost', 'boost_top', 'profile', 'profile_update', 'takeover', 'ads', 'search', 'meta']),
+  securityStatus: z.enum(['PASS', 'FAIL', 'UNKNOWN', 'PENDING']).default('PENDING'),
+  securityTradable: z.boolean().default(false),
+  securityCodes: z.array(z.string()).default([]),
+  securityCheckedAt: utc.nullable().default(null),
 });
 export type DiscoveryCandidate = z.infer<typeof discoveryCandidateSchema>;
 

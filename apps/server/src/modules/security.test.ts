@@ -14,7 +14,16 @@ it('applies exact security thresholds and never excludes ambiguous large account
   expect(evaluateSecurity({ ...evidence, freezeAuthority: true }).status).toBe('FAIL');
   expect(evaluateSecurity({ ...evidence, supplyRaw: '0' }).status).toBe('FAIL');
   expect(evaluateSecurity({ ...evidence, extensions: [1, 12, 14, 999] }).status).toBe('FAIL');
-  expect(evaluateSecurity({ ...evidence, accounts: [{ address: 'big', amountRaw: '600000', role: 'POOL', verified: false }] }).status).toBe('UNKNOWN');
+  expect(evaluateSecurity({ ...evidence, extensions: [18, 19] }).status).toBe('PASS');
+  expect(evaluateSecurity({ ...evidence, extensions: [18, 19] }).tradable).toBe(true);
+  const unverified = evaluateSecurity({ ...evidence, accounts: [{ address: 'big', amountRaw: '600000', role: 'POOL', verified: false }] });
+  expect(unverified.status).toBe('UNKNOWN');
+  expect(unverified.tradable).toBe(true);
+  expect(unverified.largestRatio).toBe('0.6');
+  expect(evaluateSecurity({
+    ...evidence,
+    accounts: [{ address: 'pool', amountRaw: '600000', role: 'POOL', verified: true }, ...evidence.accounts],
+  }).status).toBe('PASS');
   expect(evaluateSecurity({ ...evidence, accounts: [{ address: 'big', amountRaw: '200001', role: 'HOLDER', verified: true }] }).status).toBe('FAIL');
   expect(evaluateSecurity({ ...evidence, accounts: [{ address: 'boundary', amountRaw: '200000', role: 'HOLDER', verified: true }] }).status).toBe('PASS');
   expect(evaluateSecurity({ ...evidence, accounts: evidence.accounts.map((a) => ({ ...a, amountRaw: '50001' })) }).status).toBe('FAIL');
